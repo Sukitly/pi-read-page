@@ -1,0 +1,38 @@
+{
+  "name": "pi-web-read",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "keywords": [
+    "pi-package"
+  ],
+  "pi": {
+    "extensions": [
+      "./extensions/web-read.ts"
+    ]
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "smoke": "tsx scripts/smoke-web-read.ts"
+  },
+  "dependencies": {
+    "defuddle": "^0.18.1",
+    "linkedom": "^0.18.12",
+    "playwright-core": "^1.52.0"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*",
+    "@earendil-works/pi-tui": "*",
+    "typebox": "*"
+  },
+  "devDependencies": {
+    "@earendil-works/pi-coding-agent": "^0.77.0",
+    "@earendil-works/pi-tui": "^0.77.0",
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.0",
+    "typebox": "^1.1.39",
+    "typescript": "^5.8.0",
+    "vitest": "^4.0.18"
+  }
+}
