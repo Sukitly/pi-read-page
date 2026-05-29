@@ -39,7 +39,7 @@ Cache:
 - User-action TTL: 1 day.
 - Cache files: `content.md` + `meta.json`.
 - Writes are atomic and content is sha256-verified on load.
-- If refresh/extraction fails and stale cache exists, stale cache is returned with a warning.
+- If refresh/extraction fails and cache exists, cached content is returned with an accurate `refresh-failed-fresh` or `stale-fallback` warning.
 
 ## Extraction pipeline
 
@@ -47,10 +47,12 @@ The production extraction core follows Obsidian Web Clipper's approach:
 
 ```text
 Playwright headed browser
+  -> request-level private-network policy
   -> wait for DOM + network idle
+  -> final URL private-network policy
   -> read-only lazy scroll
   -> flatten open shadow roots into data-defuddle-shadow
-  -> clean HTML and absolutize src/href/srcset
+  -> absolutize src/href/srcset for extraction
   -> Defuddle extraction with Markdown output
   -> confidence assessment
   -> optional user handoff via ctx.ui.confirm
@@ -68,14 +70,14 @@ Default privacy stance:
 
 ```bash
 cd /Users/sukit/Codes/open-source/pi-web-read
-npm install
+bun install
 pi -e .
 ```
 
 Smoke test without pi:
 
 ```bash
-npm run smoke -- https://example.com
+bun run smoke -- https://example.com
 ```
 
 ## Environment
@@ -102,4 +104,4 @@ Defaults:
 
 ## Status
 
-Production extraction core, cache, pagination, stale fallback, URL policy, TUI rendering, and pure unit tests implemented. No GitHub remote and no initial commit yet.
+Production extraction core, cache, pagination, stale fallback, URL policy, TUI rendering, browser cleanup, and pure unit tests implemented.

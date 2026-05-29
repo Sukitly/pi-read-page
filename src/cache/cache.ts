@@ -116,9 +116,12 @@ export function paginate(
   const totalLines = lines.length;
   const startIndex = Math.max(0, offset - 1);
   if (startIndex >= totalLines) {
-    throw new Error(
-      `Offset ${offset} is beyond end of document (${totalLines} lines total)`,
-    );
+    return {
+      selected: "",
+      totalLines,
+      shownStart: totalLines + 1,
+      shownEnd: totalLines,
+    };
   }
   const endIndex = Math.min(totalLines, startIndex + limit);
   return {

@@ -18,13 +18,23 @@ export function prepareHtmlForExtraction(
   html: string,
   url: string,
 ): { document: Document; cleanedHtml: string } {
-  const { document } = parseHTML(html);
+  const { document, baseUrl } = parseDocument(html, url);
+  absolutizeUrls(document, baseUrl);
 
-  const base = document.querySelector("base[href]");
-  const baseUrl = base?.getAttribute("href")
-    ? new URL(base.getAttribute("href") || url, url).href
-    : url;
+  return {
+    document: document as unknown as Document,
+    cleanedHtml: cleanHtmlForOutput(
+      document.documentElement?.outerHTML || html,
+      url,
+    ),
+  };
+}
 
+export function cleanHtmlForOutput(html: string, url: string): string {
+  const { document, baseUrl } = parseDocument(html, url);
+
+  // Output cleanup only. Do not remove styles before Defuddle extraction because
+  // Defuddle may use visibility/style hints while scoring content.
   document.querySelectorAll("script, style, noscript").forEach((element) => {
     element.remove();
   });
@@ -33,11 +43,20 @@ export function prepareHtmlForExtraction(
   });
 
   absolutizeUrls(document, baseUrl);
+  return document.documentElement?.outerHTML || html;
+}
 
-  return {
-    document: document as unknown as Document,
-    cleanedHtml: document.documentElement?.outerHTML || html,
-  };
+function parseDocument(
+  html: string,
+  url: string,
+): { document: Document; baseUrl: string } {
+  const { document } = parseHTML(html);
+  const base = document.querySelector("base[href]");
+  const baseUrl = base?.getAttribute("href")
+    ? new URL(base.getAttribute("href") || url, url).href
+    : url;
+
+  return { document: document as unknown as Document, baseUrl };
 }
 
 function absolutizeUrls(document: Document, baseUrl: string): void {

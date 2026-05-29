@@ -19,7 +19,12 @@ describe("paginate", () => {
     expect(result.shownEnd).toBe(2);
   });
 
-  it("throws when offset is beyond end", () => {
-    expect(() => paginate("a\nb", 3, 1)).toThrow(/beyond end/);
+  it("returns an empty page when offset is beyond end", () => {
+    expect(paginate("a\nb", 3, 1)).toEqual({
+      selected: "",
+      totalLines: 2,
+      shownStart: 3,
+      shownEnd: 2,
+    });
   });
 });

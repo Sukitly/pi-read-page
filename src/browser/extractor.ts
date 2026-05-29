@@ -34,7 +34,7 @@ export async function extractMarkdown(page: Page): Promise<ExtractedPage> {
   const markdown = (
     result.contentMarkdown || htmlToPlainMarkdown(contentHtml, url)
   ).trim();
-  const textLength = htmlToText(contentHtml, url).length;
+  const textLength = cleanText(markdown).length;
   const metadata = buildMetadata(result);
   const title = cleanText(result.title || document.title || url);
 
@@ -140,10 +140,6 @@ function buildWarnings(
   if (!result.title) warnings.push("No title extracted.");
 
   return warnings;
-}
-
-function htmlToText(html: string, url: string): string {
-  return cleanText(structuredTextFallback(html, url));
 }
 
 function htmlToPlainMarkdown(html: string, url: string): string {

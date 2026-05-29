@@ -1,5 +1,8 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { normalizeHttpUrl } from "../src/security/url-policy";
+import {
+  assertHttpUrlAllowed,
+  normalizeHttpUrl,
+} from "../src/security/url-policy";
 
 describe("normalizeHttpUrl", () => {
   const oldAllow = process.env.WEB_READ_ALLOW_PRIVATE_NETWORK;
@@ -58,5 +61,11 @@ describe("normalizeHttpUrl", () => {
     expect(
       normalizeHttpUrl("http://127.0.0.1:3000/a", { preserveQuery: false }).url,
     ).toBe("http://127.0.0.1:3000/a");
+  });
+
+  it("applies the same policy to final or redirected URLs", async () => {
+    await expect(
+      assertHttpUrlAllowed("http://127.0.0.1/after-redirect"),
+    ).rejects.toThrow(/private\/local/);
   });
 });

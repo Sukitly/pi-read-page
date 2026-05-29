@@ -2,8 +2,10 @@ import { mkdir, mkdtemp } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { type BrowserContext, chromium, type Page } from "playwright-core";
+import { assertHttpUrlAllowed, isHttpLikeUrl } from "../security/url-policy";
 
 let context: BrowserContext | undefined;
+let contextPromise: Promise<BrowserContext> | undefined;
 let activeProfileDir: string | undefined;
 let usingTemporaryProfile = false;
 
@@ -19,17 +21,28 @@ function defaultProfileDir(): string {
 
 async function getContext(): Promise<BrowserContext> {
   if (context) return context;
+  contextPromise ??= createContext();
 
+  try {
+    context = await contextPromise;
+    return context;
+  } catch (error) {
+    contextPromise = undefined;
+    throw error;
+  }
+}
+
+async function createContext(): Promise<BrowserContext> {
   const profileDir = expandHome(
     process.env.WEB_READ_PROFILE_DIR || defaultProfileDir(),
   );
   await mkdir(profileDir, { recursive: true });
 
   try {
-    context = await launchPersistent(profileDir);
+    const browserContext = await launchPersistent(profileDir);
     activeProfileDir = profileDir;
     usingTemporaryProfile = false;
-    return context;
+    return browserContext;
   } catch (error) {
     if (
       !isProfileInUseError(error) ||
@@ -41,20 +54,42 @@ async function getContext(): Promise<BrowserContext> {
     const tempProfileDir = await mkdtemp(
       join(tmpdir(), "pi-web-read-profile-"),
     );
-    context = await launchPersistent(tempProfileDir);
+    const browserContext = await launchPersistent(tempProfileDir);
     activeProfileDir = tempProfileDir;
     usingTemporaryProfile = true;
-    return context;
+    return browserContext;
   }
 }
 
-function launchPersistent(profileDir: string): Promise<BrowserContext> {
-  return chromium.launchPersistentContext(profileDir, {
+async function launchPersistent(profileDir: string): Promise<BrowserContext> {
+  const browserContext = await chromium.launchPersistentContext(profileDir, {
     headless: false,
     channel: process.env.WEB_READ_BROWSER_CHANNEL || "chrome",
     executablePath: process.env.WEB_READ_CHROME_PATH || undefined,
     viewport: null,
     args: ["--disable-blink-features=AutomationControlled"],
+  });
+
+  await installNetworkPolicy(browserContext);
+  return browserContext;
+}
+
+async function installNetworkPolicy(
+  browserContext: BrowserContext,
+): Promise<void> {
+  await browserContext.route("**/*", async (route) => {
+    const url = route.request().url();
+    if (!isHttpLikeUrl(url)) {
+      await route.continue();
+      return;
+    }
+
+    try {
+      await assertHttpUrlAllowed(url);
+      await route.continue();
+    } catch {
+      await route.abort("blockedbyclient");
+    }
   });
 }
 
@@ -75,6 +110,7 @@ export function getBrowserRuntimeInfo() {
 export async function closeBrowser(): Promise<void> {
   const current = context;
   context = undefined;
+  contextPromise = undefined;
   activeProfileDir = undefined;
   usingTemporaryProfile = false;
   await current?.close().catch(() => undefined);
@@ -87,11 +123,14 @@ export async function openPage(
   if (signal?.aborted)
     throw new Error("web_read aborted before opening browser");
 
+  await assertHttpUrlAllowed(url);
   const browserContext = await getContext();
   const page = await browserContext.newPage();
 
   await page.goto(url, { waitUntil: "domcontentloaded", timeout: 45_000 });
+  await assertHttpUrlAllowed(page.url());
   await settlePage(page, signal);
+  await assertHttpUrlAllowed(page.url());
   return page;
 }
 
