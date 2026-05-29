@@ -2,24 +2,35 @@ import { parseHTML } from "linkedom";
 import type { Page } from "playwright-core";
 
 export async function flattenOpenShadowRoots(page: Page): Promise<void> {
-  await page.evaluate(() => {
-    document.querySelectorAll("*").forEach((element) => {
-      const shadowRoot = element.shadowRoot;
-      if (shadowRoot?.innerHTML) {
-        element.setAttribute("data-defuddle-shadow", shadowRoot.innerHTML);
-      }
-    });
-  }).catch(() => undefined);
+  await page
+    .evaluate(() => {
+      document.querySelectorAll("*").forEach((element) => {
+        const shadowRoot = element.shadowRoot;
+        if (shadowRoot?.innerHTML) {
+          element.setAttribute("data-defuddle-shadow", shadowRoot.innerHTML);
+        }
+      });
+    })
+    .catch(() => undefined);
 }
 
-export function prepareHtmlForExtraction(html: string, url: string): { document: Document; cleanedHtml: string } {
+export function prepareHtmlForExtraction(
+  html: string,
+  url: string,
+): { document: Document; cleanedHtml: string } {
   const { document } = parseHTML(html);
 
   const base = document.querySelector("base[href]");
-  const baseUrl = base?.getAttribute("href") ? new URL(base.getAttribute("href") || url, url).href : url;
+  const baseUrl = base?.getAttribute("href")
+    ? new URL(base.getAttribute("href") || url, url).href
+    : url;
 
-  document.querySelectorAll("script, style, noscript").forEach((element) => element.remove());
-  document.querySelectorAll("*").forEach((element) => element.removeAttribute("style"));
+  document.querySelectorAll("script, style, noscript").forEach((element) => {
+    element.remove();
+  });
+  document.querySelectorAll("*").forEach((element) => {
+    element.removeAttribute("style");
+  });
 
   absolutizeUrls(document, baseUrl);
 
@@ -37,10 +48,20 @@ function absolutizeUrls(document: Document, baseUrl: string): void {
   });
 }
 
-function absolutizeAttribute(element: Element, attr: "src" | "href", baseUrl: string): void {
+function absolutizeAttribute(
+  element: Element,
+  attr: "src" | "href",
+  baseUrl: string,
+): void {
   const value = element.getAttribute(attr);
   if (!value) return;
-  if (value.startsWith("http://") || value.startsWith("https://") || value.startsWith("data:") || value.startsWith("#")) return;
+  if (
+    value.startsWith("http://") ||
+    value.startsWith("https://") ||
+    value.startsWith("data:") ||
+    value.startsWith("#")
+  )
+    return;
   if (value.startsWith("//")) {
     const protocol = new URL(baseUrl).protocol;
     element.setAttribute(attr, `${protocol}${value}`);
@@ -58,18 +79,23 @@ function absolutizeSrcset(element: Element, baseUrl: string): void {
   const value = element.getAttribute("srcset");
   if (!value) return;
 
-  const next = value.split(",").map((candidate) => {
-    const parts = candidate.trim().split(/\s+/);
-    const src = parts.shift();
-    if (!src) return candidate;
+  const next = value
+    .split(",")
+    .map((candidate) => {
+      const parts = candidate.trim().split(/\s+/);
+      const src = parts.shift();
+      if (!src) return candidate;
 
-    try {
-      const absolute = src.startsWith("data:") ? src : new URL(src, baseUrl).href;
-      return [absolute, ...parts].join(" ");
-    } catch {
-      return candidate;
-    }
-  }).join(", ");
+      try {
+        const absolute = src.startsWith("data:")
+          ? src
+          : new URL(src, baseUrl).href;
+        return [absolute, ...parts].join(" ");
+      } catch {
+        return candidate;
+      }
+    })
+    .join(", ");
 
   element.setAttribute("srcset", next);
 }

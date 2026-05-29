@@ -2,15 +2,26 @@ import { createHash } from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
-import type { ConfidenceReport, PageMetadata } from "../types";
 import type { NormalizedUrl, UrlNormalization } from "../security/url-policy";
+import type { ConfidenceReport, PageMetadata } from "../types";
 
-export const CACHE_DIR = path.join(homedir(), ".pi", "agent", "caches", "web-read");
+export const CACHE_DIR = path.join(
+  homedir(),
+  ".pi",
+  "agent",
+  "caches",
+  "web-read",
+);
 export const DEFAULT_TTL_DAYS = 30;
 export const USER_ACTION_TTL_DAYS = 1;
 
 export type WebReadCacheSource = "browser";
-export type WebReadCacheStatus = "hit" | "miss" | "refresh" | "refresh-failed-fresh" | "stale-fallback";
+export type WebReadCacheStatus =
+  | "hit"
+  | "miss"
+  | "refresh"
+  | "refresh-failed-fresh"
+  | "stale-fallback";
 
 export type CacheMeta = {
   version: number;
@@ -74,7 +85,13 @@ function cacheKey(url: string): string {
   return `${host}--${slug}--${urlHash.slice(0, 12)}`;
 }
 
-export function cachePaths(url: string): { dirPath: string; mdPath: string; metaPath: string; key: string; urlSha256: string } {
+export function cachePaths(url: string): {
+  dirPath: string;
+  mdPath: string;
+  metaPath: string;
+  key: string;
+  urlSha256: string;
+} {
   const key = cacheKey(url);
   const dirPath = path.join(CACHE_DIR, key);
   return {
@@ -90,16 +107,25 @@ export function countLines(markdown: string): number {
   return markdown.split(/\r?\n/).length;
 }
 
-export function paginate(markdown: string, offset: number, limit: number): Pagination {
+export function paginate(
+  markdown: string,
+  offset: number,
+  limit: number,
+): Pagination {
   const lines = markdown.split(/\r?\n/);
   const totalLines = lines.length;
   const startIndex = Math.max(0, offset - 1);
   if (startIndex >= totalLines) {
-    throw new Error(`Offset ${offset} is beyond end of document (${totalLines} lines total)`);
+    throw new Error(
+      `Offset ${offset} is beyond end of document (${totalLines} lines total)`,
+    );
   }
   const endIndex = Math.min(totalLines, startIndex + limit);
   return {
-    selected: startIndex < totalLines ? lines.slice(startIndex, endIndex).join("\n") : "",
+    selected:
+      startIndex < totalLines
+        ? lines.slice(startIndex, endIndex).join("\n")
+        : "",
     totalLines,
     shownStart: totalLines === 0 ? 0 : Math.min(offset, totalLines),
     shownEnd: totalLines === 0 ? 0 : endIndex,
@@ -107,37 +133,57 @@ export function paginate(markdown: string, offset: number, limit: number): Pagin
   };
 }
 
-export async function loadCached(url: string): Promise<CachedDocument | undefined> {
+export async function loadCached(
+  url: string,
+): Promise<CachedDocument | undefined> {
   const paths = cachePaths(url);
   try {
     return await loadCachedFromPaths(url, paths);
   } catch (error) {
     if (!isNotFoundError(error)) {
-      console.warn(`[web_read] Ignoring corrupt cache for ${url}: ${errorMessage(error)}`);
+      console.warn(
+        `[web_read] Ignoring corrupt cache for ${url}: ${errorMessage(error)}`,
+      );
     }
     return undefined;
   }
 }
 
-export async function loadCachedFromPaths(url: string, paths: { mdPath: string; metaPath: string }): Promise<CachedDocument> {
-  const [markdown, metaRaw] = await Promise.all([readFile(paths.mdPath, "utf8"), readFile(paths.metaPath, "utf8")]);
+export async function loadCachedFromPaths(
+  url: string,
+  paths: { mdPath: string; metaPath: string },
+): Promise<CachedDocument> {
+  const [markdown, metaRaw] = await Promise.all([
+    readFile(paths.mdPath, "utf8"),
+    readFile(paths.metaPath, "utf8"),
+  ]);
   const meta = JSON.parse(metaRaw) as CacheMeta;
   if (meta.url !== url) throw new Error("Cache URL mismatch");
-  if (meta.content_sha256 !== sha256(markdown)) throw new Error("Cache checksum mismatch");
-  if (!Number.isFinite(Date.parse(meta.expires_at))) throw new Error("Invalid cache expires_at");
+  if (meta.content_sha256 !== sha256(markdown))
+    throw new Error("Cache checksum mismatch");
+  if (!Number.isFinite(Date.parse(meta.expires_at)))
+    throw new Error("Invalid cache expires_at");
   const fresh = Date.now() < Date.parse(meta.expires_at);
   return { markdown, meta, fresh };
 }
 
 function isNotFoundError(error: unknown): boolean {
-  return typeof error === "object" && error !== null && "code" in error && (error as { code?: unknown }).code === "ENOENT";
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error as { code?: unknown }).code === "ENOENT"
+  );
 }
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-async function writeFileAtomic(filePath: string, content: string): Promise<void> {
+async function writeFileAtomic(
+  filePath: string,
+  content: string,
+): Promise<void> {
   const tmpPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
   await writeFile(tmpPath, content, "utf8");
   await rename(tmpPath, filePath);
@@ -155,7 +201,9 @@ export async function saveCached(params: {
   metadata: PageMetadata;
   browserProfile?: "persistent" | "temporary";
 }): Promise<CacheMeta> {
-  const { dirPath, mdPath, metaPath, key, urlSha256 } = cachePaths(params.normalized.url);
+  const { dirPath, mdPath, metaPath, key, urlSha256 } = cachePaths(
+    params.normalized.url,
+  );
   await mkdir(dirPath, { recursive: true });
 
   const now = Date.now();

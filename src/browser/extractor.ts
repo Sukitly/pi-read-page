@@ -1,8 +1,14 @@
 import type { DefuddleOptions, DefuddleResponse } from "defuddle/full";
 import type { Page } from "playwright-core";
-import { assessConfidence, decideUserAction as decideUserActionFromConfidence } from "./confidence";
-import { flattenOpenShadowRoots, prepareHtmlForExtraction } from "./dom-preparer";
 import type { ExtractedPage, PageMetadata, UserActionDecision } from "../types";
+import {
+  assessConfidence,
+  decideUserAction as decideUserActionFromConfidence,
+} from "./confidence";
+import {
+  flattenOpenShadowRoots,
+  prepareHtmlForExtraction,
+} from "./dom-preparer";
 
 const DEFAULT_PARSE_TIMEOUT_MS = 8_000;
 
@@ -25,7 +31,9 @@ export async function extractMarkdown(page: Page): Promise<ExtractedPage> {
   const { result, parseMode } = await parseWithDefuddle(cleanedHtml, url);
 
   const contentHtml = result.content || document.body?.innerHTML || "";
-  const markdown = (result.contentMarkdown || htmlToPlainMarkdown(contentHtml, url)).trim();
+  const markdown = (
+    result.contentMarkdown || htmlToPlainMarkdown(contentHtml, url)
+  ).trim();
   const textLength = htmlToText(contentHtml, url).length;
   const metadata = buildMetadata(result);
   const title = cleanText(result.title || document.title || url);
@@ -58,9 +66,14 @@ export function decideUserAction(extracted: ExtractedPage): UserActionDecision {
   return decideUserActionFromConfidence(extracted);
 }
 
-async function parseWithDefuddle(html: string, url: string): Promise<{ result: DefuddleResponse; parseMode: ParseMode }> {
+async function parseWithDefuddle(
+  html: string,
+  url: string,
+): Promise<{ result: DefuddleResponse; parseMode: ParseMode }> {
   const allowThirdPartyAsync = process.env.WEB_READ_DEFUDDLE_ASYNC === "1";
-  const timeoutMs = Number.parseInt(process.env.WEB_READ_PARSE_TIMEOUT_MS || "", 10) || DEFAULT_PARSE_TIMEOUT_MS;
+  const timeoutMs =
+    Number.parseInt(process.env.WEB_READ_PARSE_TIMEOUT_MS || "", 10) ||
+    DEFAULT_PARSE_TIMEOUT_MS;
   const options: DefuddleOptions = {
     url,
     debug: process.env.WEB_READ_DEFUDDLE_DEBUG === "1",
@@ -76,7 +89,11 @@ async function parseWithDefuddle(html: string, url: string): Promise<{ result: D
     const result = await withTimeout(Defuddle(html, url, options), timeoutMs);
     return { result, parseMode: allowThirdPartyAsync ? "async" : "sync" };
   } catch {
-    const result = await Defuddle(html, url, { ...options, useAsync: false, separateMarkdown: true });
+    const result = await Defuddle(html, url, {
+      ...options,
+      useAsync: false,
+      separateMarkdown: true,
+    });
     return { result, parseMode: "sync-fallback" };
   }
 }
@@ -100,13 +117,26 @@ function buildMetadata(result: DefuddleResponse): PageMetadata {
   };
 }
 
-function buildWarnings(result: DefuddleResponse, markdown: string, textLength: number): string[] {
+function buildWarnings(
+  result: DefuddleResponse,
+  markdown: string,
+  textLength: number,
+): string[] {
   const warnings: string[] = [];
 
-  if (!result.content) warnings.push("Defuddle did not return extracted HTML; body fallback may have been used internally.");
-  if (!result.contentMarkdown) warnings.push("Defuddle did not return Markdown; used structured plain-text fallback, so some formatting may be lost.");
+  if (!result.content)
+    warnings.push(
+      "Defuddle did not return extracted HTML; body fallback may have been used internally.",
+    );
+  if (!result.contentMarkdown)
+    warnings.push(
+      "Defuddle did not return Markdown; used structured plain-text fallback, so some formatting may be lost.",
+    );
   if (!markdown.trim()) warnings.push("No Markdown content extracted.");
-  if (textLength < 500) warnings.push("Extracted text is short; the page may require login, captcha, or manual navigation.");
+  if (textLength < 500)
+    warnings.push(
+      "Extracted text is short; the page may require login, captcha, or manual navigation.",
+    );
   if (!result.title) warnings.push("No title extracted.");
 
   return warnings;
@@ -122,10 +152,17 @@ function htmlToPlainMarkdown(html: string, url: string): string {
 
 function structuredTextFallback(html: string, url: string): string {
   const { document } = prepareHtmlForExtraction(`<body>${html}</body>`, url);
-  const blocks = Array.from(document.querySelectorAll("h1,h2,h3,h4,h5,h6,p,li,pre,blockquote"));
+  const blocks = Array.from(
+    document.querySelectorAll("h1,h2,h3,h4,h5,h6,p,li,pre,blockquote"),
+  );
 
   if (blocks.length === 0) {
-    return cleanTextPreservingLines(document.body?.textContent || document.documentElement?.textContent || document.textContent || "");
+    return cleanTextPreservingLines(
+      document.body?.textContent ||
+        document.documentElement?.textContent ||
+        document.textContent ||
+        "",
+    );
   }
 
   return blocks
@@ -140,9 +177,14 @@ function formatBlock(element: Element): string {
   const text = cleanTextPreservingLines(element.textContent || "");
   if (!text) return "";
 
-  if (/^h[1-6]$/.test(tag)) return `${"#".repeat(Number(tag.slice(1)))} ${text}`;
+  if (/^h[1-6]$/.test(tag))
+    return `${"#".repeat(Number(tag.slice(1)))} ${text}`;
   if (tag === "li") return `- ${text}`;
-  if (tag === "blockquote") return text.split("\n").map((line) => `> ${line}`).join("\n");
+  if (tag === "blockquote")
+    return text
+      .split("\n")
+      .map((line) => `> ${line}`)
+      .join("\n");
   if (tag === "pre") return `\`\`\`\n${text}\n\`\`\``;
   return text;
 }
@@ -164,7 +206,10 @@ function cleanTextPreservingLines(value: string): string {
 
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
   return new Promise<T>((resolve, reject) => {
-    const timeout = setTimeout(() => reject(new Error(`Timed out after ${timeoutMs}ms`)), timeoutMs);
+    const timeout = setTimeout(
+      () => reject(new Error(`Timed out after ${timeoutMs}ms`)),
+      timeoutMs,
+    );
     promise.then(
       (value) => {
         clearTimeout(timeout);

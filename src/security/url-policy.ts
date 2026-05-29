@@ -12,7 +12,10 @@ export type NormalizedUrl = {
   normalization: UrlNormalization;
 };
 
-export function normalizeHttpUrl(input: string, options: { preserveQuery: boolean }): NormalizedUrl {
+export function normalizeHttpUrl(
+  input: string,
+  options: { preserveQuery: boolean },
+): NormalizedUrl {
   const inputUrl = input.trim();
   let parsed: URL;
 
@@ -23,7 +26,9 @@ export function normalizeHttpUrl(input: string, options: { preserveQuery: boolea
   }
 
   if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-    throw new Error(`Only http:// and https:// URLs are supported. Refusing URL: ${input}`);
+    throw new Error(
+      `Only http:// and https:// URLs are supported. Refusing URL: ${input}`,
+    );
   }
 
   parsed.hostname = parsed.hostname.toLowerCase();
@@ -33,8 +38,10 @@ export function normalizeHttpUrl(input: string, options: { preserveQuery: boolea
   const stripQuery = !options.preserveQuery;
   if (stripQuery) parsed.search = "";
 
-  const stripTrailingSlash = parsed.pathname !== "/" && parsed.pathname.endsWith("/");
-  if (stripTrailingSlash) parsed.pathname = parsed.pathname.replace(/\/+$/g, "");
+  const stripTrailingSlash =
+    parsed.pathname !== "/" && parsed.pathname.endsWith("/");
+  if (stripTrailingSlash)
+    parsed.pathname = parsed.pathname.replace(/\/+$/g, "");
 
   return {
     inputUrl,
@@ -51,22 +58,37 @@ function enforceHostPolicy(hostname: string): void {
   if (process.env.WEB_READ_ALLOW_PRIVATE_NETWORK === "1") return;
 
   const host = hostname.replace(/^\[|\]$/g, "").toLowerCase();
-  if (host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local") || host.endsWith(".internal")) {
-    throw new Error(`Refusing private/local hostname: ${hostname}. Set WEB_READ_ALLOW_PRIVATE_NETWORK=1 to allow it explicitly.`);
+  if (
+    host === "localhost" ||
+    host.endsWith(".localhost") ||
+    host.endsWith(".local") ||
+    host.endsWith(".internal")
+  ) {
+    throw new Error(
+      `Refusing private/local hostname: ${hostname}. Set WEB_READ_ALLOW_PRIVATE_NETWORK=1 to allow it explicitly.`,
+    );
   }
 
   const ipVersion = isIP(host);
   if (ipVersion === 4 && isPrivateIPv4(host)) {
-    throw new Error(`Refusing private/local IPv4 address: ${hostname}. Set WEB_READ_ALLOW_PRIVATE_NETWORK=1 to allow it explicitly.`);
+    throw new Error(
+      `Refusing private/local IPv4 address: ${hostname}. Set WEB_READ_ALLOW_PRIVATE_NETWORK=1 to allow it explicitly.`,
+    );
   }
   if (ipVersion === 6 && isPrivateIPv6(host)) {
-    throw new Error(`Refusing private/local IPv6 address: ${hostname}. Set WEB_READ_ALLOW_PRIVATE_NETWORK=1 to allow it explicitly.`);
+    throw new Error(
+      `Refusing private/local IPv6 address: ${hostname}. Set WEB_READ_ALLOW_PRIVATE_NETWORK=1 to allow it explicitly.`,
+    );
   }
 }
 
 function isPrivateIPv4(ip: string): boolean {
   const parts = ip.split(".").map((part) => Number.parseInt(part, 10));
-  if (parts.length !== 4 || parts.some((part) => !Number.isInteger(part) || part < 0 || part > 255)) return true;
+  if (
+    parts.length !== 4 ||
+    parts.some((part) => !Number.isInteger(part) || part < 0 || part > 255)
+  )
+    return true;
   const [a, b] = parts;
 
   return (

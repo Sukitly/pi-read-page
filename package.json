@@ -14,7 +14,8 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "smoke": "tsx scripts/smoke-web-read.ts"
+    "smoke": "tsx scripts/smoke-web-read.ts",
+    "lint": "bun run typecheck && bunx --bun @biomejs/biome check --error-on-warnings --write ."
   },
   "dependencies": {
     "defuddle": "^0.18.1",
@@ -27,6 +28,7 @@
     "typebox": "*"
   },
   "devDependencies": {
+    "@biomejs/biome": "2.4.16",
     "@earendil-works/pi-coding-agent": "^0.77.0",
     "@earendil-works/pi-tui": "^0.77.0",
     "@types/node": "^22.0.0",

@@ -21,7 +21,11 @@ export interface PageMetadata {
   wordCount: number;
   parseTime: number;
   schemaOrgData?: unknown;
-  metaTags: Array<{ name?: string | null; property?: string | null; content: string | null }>;
+  metaTags: Array<{
+    name?: string | null;
+    property?: string | null;
+    content: string | null;
+  }>;
   variables: Record<string, string>;
 }
 

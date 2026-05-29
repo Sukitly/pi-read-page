@@ -1,8 +1,17 @@
+import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { HandoffReason } from "../types";
 
-export async function waitForUserAction(ctx: any, url: string, reason: HandoffReason, message: string, signal?: AbortSignal): Promise<boolean> {
+export async function waitForUserAction(
+  ctx: ExtensionContext,
+  url: string,
+  reason: HandoffReason,
+  message: string,
+  signal?: AbortSignal,
+): Promise<boolean> {
   if (!ctx.hasUI) {
-    throw new Error(`No interactive UI available for required user action: ${reason}`);
+    throw new Error(
+      `No interactive UI available for required user action: ${reason}`,
+    );
   }
 
   const statusKey = "web-read";

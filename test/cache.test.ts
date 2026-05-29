@@ -2,7 +2,11 @@ import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { loadCachedFromPaths, sha256, type CacheMeta } from "../src/cache/cache";
+import {
+  type CacheMeta,
+  loadCachedFromPaths,
+  sha256,
+} from "../src/cache/cache";
 
 function metaFor(url: string, markdown: string): CacheMeta {
   return {
@@ -12,7 +16,11 @@ function metaFor(url: string, markdown: string): CacheMeta {
     final_url: url,
     cache_key: "test",
     url_sha256: sha256(url),
-    normalization: { strip_fragment: true, strip_query: true, strip_trailing_slash: false },
+    normalization: {
+      strip_fragment: true,
+      strip_query: true,
+      strip_trailing_slash: false,
+    },
     source: "browser",
     extractor: "defuddle",
     extraction: "auto",
@@ -67,6 +75,8 @@ describe("cache integrity", () => {
     await writeFile(mdPath, "changed", "utf8");
     await writeFile(metaPath, JSON.stringify(metaFor(url, "original")), "utf8");
 
-    await expect(loadCachedFromPaths(url, { mdPath, metaPath })).rejects.toThrow(/checksum mismatch/);
+    await expect(
+      loadCachedFromPaths(url, { mdPath, metaPath }),
+    ).rejects.toThrow(/checksum mismatch/);
   });
 });
