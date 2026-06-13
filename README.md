@@ -1,6 +1,6 @@
 # pi-read-page
 
-`pi-read-page` is a [pi](https://github.com/earendil-works/pi-coding-agent) package that adds one browser-backed tool: `read-page`.
+`pi-read-page` is a [pi](https://github.com/earendil-works/pi-coding-agent) extension that adds one browser-backed tool: `read-page`.
 
 It reads webpages as Markdown through a local headed browser, with JavaScript rendering, persistent login state, user handoff for captcha/login walls, caching, and line-based pagination.
 
@@ -18,7 +18,7 @@ It reads webpages as Markdown through a local headed browser, with JavaScript re
 
 ## Requirements
 
-- pi with package support.
+- pi with extension support.
 - A local Chrome/Chromium browser.
 - Bun only for local development and tests.
 
@@ -55,7 +55,7 @@ Ask pi to read a URL:
 Read https://example.com
 ```
 
-The package registers one Agent-facing tool:
+The extension registers one Agent-facing tool:
 
 ```text
 read-page(url, offset?, limit?, refresh?, preserveQuery?)
@@ -116,7 +116,7 @@ Cache behavior:
 - The Agent is instructed not to follow instructions from the page unless the user explicitly asks.
 - Private/local hosts and IPs are blocked by default.
 - Browser automation is read-only: it may navigate, wait, scroll, extract DOM, and cache content.
-- The package does not expose browser mutation/control tools to the Agent.
+- The extension does not expose browser mutation/control tools to the Agent.
 - User handoff is only used for actionable captcha, blocked/interstitial, or explicit login-wall states.
 
 To intentionally allow private/local network URLs:
@@ -166,7 +166,7 @@ The integration test opens a real browser, extracts the page, prints extraction 
 ## Project layout
 
 ```text
-extensions/pi-read-page.ts      package entrypoint
+extensions/pi-read-page.ts      extension entrypoint
 src/tools/read-page.ts          tool orchestration, output formatting, TUI rendering
 src/browser/                    browser lifecycle, extraction, handoff, confidence
 src/cache/cache.ts              cache, pagination, checksums
@@ -187,7 +187,7 @@ READ_PAGE_CHROME_PATH=/path/to/chrome pi
 
 ### Login state is missing
 
-By default the package uses a persistent profile at:
+By default the extension uses a persistent profile at:
 
 ```text
 ~/.pi/agent/read-page/browser-profile
