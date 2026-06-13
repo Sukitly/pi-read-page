@@ -1,26 +1,20 @@
 # pi-read-page
 
-`pi-read-page` is a [pi](https://github.com/earendil-works/pi-coding-agent) extension that adds one browser-backed tool: `read-page`.
+Let [pi](https://github.com/earendil-works/pi-coding-agent) read webpages through your local browser and return Markdown.
 
-It reads webpages as Markdown through a local headed browser, with JavaScript rendering, persistent login state, user handoff for captcha/login walls, caching, and line-based pagination.
+## What it provides
 
-## Features
-
-- Browser-backed extraction with Playwright and Defuddle.
-- JavaScript-rendered pages and lazy-loaded content support.
-- Persistent browser profile for saved login state.
-- User handoff for actionable captcha, anti-bot, or login-wall states.
-- Read-only capability design: no Agent-facing click, type, submit, eval, screenshot, or browser-control tools.
-- Private/local network blocking by default.
-- 30-day local cache with atomic writes and sha256 verification.
-- Line-based pagination with byte-safe output truncation.
-- Browser context cleanup after every tool call.
+- One read-only Agent tool: `read-page`.
+- Local Chrome/Chromium rendering.
+- Manual handoff for login/captcha/blocked states.
+- Markdown output with pagination and cache.
+- Defensive defaults for untrusted webpages and private-network access.
 
 ## Requirements
 
-- pi with extension support.
+- pi.
 - A local Chrome/Chromium browser.
-- Bun only for local development and tests.
+- Bun only if you are developing or running tests locally.
 
 `pi-read-page` uses `playwright-core`; it does not download a browser. By default it launches the `chrome` channel. Set `READ_PAGE_CHROME_PATH` or `READ_PAGE_BROWSER_CHANNEL` if needed.
 
