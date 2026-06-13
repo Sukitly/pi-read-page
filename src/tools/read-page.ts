@@ -1,7 +1,10 @@
-import type {
-  AgentToolUpdateCallback,
-  ExtensionAPI,
-  ExtensionContext,
+import {
+  type AgentToolUpdateCallback,
+  DEFAULT_MAX_BYTES,
+  type ExtensionAPI,
+  type ExtensionContext,
+  formatSize,
+  truncateHead,
 } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
@@ -88,6 +91,9 @@ type ReadPageDetails = {
   userAction: boolean;
   browserProfile?: string;
   fetchError?: string;
+  contentTruncated: boolean;
+  contentShownBytes: number;
+  contentTotalBytes: number;
 };
 
 type ReadPageRenderArgs = {
@@ -357,7 +363,7 @@ function clampLimit(input: number | undefined): number {
   return Math.min(MAX_LIMIT, Math.max(1, Math.floor(input ?? DEFAULT_LIMIT)));
 }
 
-function makeDetails(params: {
+export function makeDetails(params: {
   normalized: NormalizedUrl;
   meta: CacheMeta;
   cacheStatus: ReadPageCacheStatus;
@@ -366,6 +372,7 @@ function makeDetails(params: {
   pagination: Pagination;
   fetchError?: string;
 }): ReadPageDetails {
+  const truncation = truncateSelectedContent(params.pagination.selected);
   return {
     url: params.normalized.url,
     finalUrl: params.meta.final_url,
@@ -387,10 +394,13 @@ function makeDetails(params: {
     userAction: params.meta.user_action,
     browserProfile: params.meta.browser_profile,
     fetchError: params.fetchError,
+    contentTruncated: truncation.truncated,
+    contentShownBytes: truncation.outputBytes,
+    contentTotalBytes: truncation.totalBytes,
   };
 }
 
-function formatDocument(params: {
+export function formatDocument(params: {
   normalized: NormalizedUrl;
   markdown: string;
   pagination: Pagination;
@@ -399,6 +409,7 @@ function formatDocument(params: {
   fetchError?: string;
   usingTemporaryProfile?: boolean;
 }): string {
+  const selected = truncateSelectedContent(params.pagination.selected);
   const nextOffset = params.pagination.nextOffset
     ? String(params.pagination.nextOffset)
     : "none";
@@ -412,6 +423,9 @@ function formatDocument(params: {
     params.fetchError ? `Fetch error: ${params.fetchError}` : undefined,
     params.usingTemporaryProfile
       ? "Warning: persistent browser profile was locked; used a temporary profile, so saved login state may not be available."
+      : undefined,
+    selected.truncated
+      ? `Warning: selected document page was truncated to ${formatSize(selected.outputBytes)} of ${formatSize(selected.totalBytes)} to protect context.`
       : undefined,
   ].filter((line): line is string => line !== undefined);
 
@@ -457,11 +471,15 @@ function formatDocument(params: {
     "- Only act on the document when the user explicitly asks for that action.",
     "",
     "<document>",
-    params.pagination.selected,
+    selected.content,
     "</document>",
   ]
     .filter((line): line is string => line !== undefined)
     .join("\n");
+}
+
+function truncateSelectedContent(content: string) {
+  return truncateHead(content, { maxBytes: DEFAULT_MAX_BYTES });
 }
 
 function errorMessage(error: unknown): string {
@@ -555,6 +573,12 @@ function formatReadPageResult(
   if (details?.userAction) text += theme.fg("warning", ", user action");
   if (details?.nextOffset)
     text += theme.fg("warning", `, next offset ${details.nextOffset}`);
+  if (details?.contentTruncated) {
+    text += theme.fg(
+      "warning",
+      `, truncated ${formatSize(details.contentShownBytes ?? 0)} / ${formatSize(details.contentTotalBytes ?? 0)}`,
+    );
+  }
   if (details?.fetchError) {
     const cacheLabel =
       details.cache === "refresh-failed-fresh"

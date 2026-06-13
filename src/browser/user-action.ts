@@ -37,7 +37,7 @@ export async function waitForUserAction(
       { signal, timeout: 15 * 60 * 1000 },
     );
   } finally {
-    ctx.ui.setStatus(statusKey, "");
+    ctx.ui.setStatus(statusKey, undefined);
     ctx.ui.setWidget(statusKey, []);
   }
 }
