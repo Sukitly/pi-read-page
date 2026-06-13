@@ -5,8 +5,10 @@ import {
   formatSize,
 } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
+import type { Page } from "playwright-core";
 import { Type } from "typebox";
 import {
+  closeBrowser,
   getBrowserRuntimeInfo,
   openPage,
   settlePage,
@@ -100,6 +102,24 @@ type ReadPageRenderArgs = {
   limit?: number;
   refresh?: boolean;
   preserveQuery?: boolean;
+};
+
+type ExtractionRuntime = {
+  openPage: typeof openPage;
+  closeBrowser: typeof closeBrowser;
+  settlePage: typeof settlePage;
+  extractMarkdown: typeof extractMarkdown;
+  decideUserAction: typeof decideUserAction;
+  waitForUserAction: typeof waitForUserAction;
+};
+
+const defaultExtractionRuntime: ExtractionRuntime = {
+  openPage,
+  closeBrowser,
+  settlePage,
+  extractMarkdown,
+  decideUserAction,
+  waitForUserAction,
 };
 
 type ToolThemeColor =
@@ -297,18 +317,20 @@ export function registerReadPageTool(pi: ExtensionAPI) {
   });
 }
 
-async function extractWithOptionalUserAction(
+export async function extractWithOptionalUserAction(
   url: string,
   signal: AbortSignal | undefined,
   onUpdate: AgentToolUpdateCallback<unknown> | undefined,
   ctx: ExtensionContext,
+  runtime: ExtractionRuntime = defaultExtractionRuntime,
 ): Promise<{ extracted: ExtractedPage; userAction: boolean }> {
-  const page = await openPage(url, signal);
+  let page: Page | undefined;
   let userAction = false;
 
   try {
-    let extracted = await extractMarkdown(page);
-    let decision = decideUserAction(extracted);
+    page = await runtime.openPage(url, signal);
+    let extracted = await runtime.extractMarkdown(page);
+    let decision = runtime.decideUserAction(extracted);
 
     if (decision.required) {
       onUpdate?.({
@@ -325,7 +347,7 @@ async function extractWithOptionalUserAction(
         throw new Error(
           "read-page requires user action but no actionable reason was provided",
         );
-      const confirmed = await waitForUserAction(
+      const confirmed = await runtime.waitForUserAction(
         ctx,
         page.url(),
         decision.reason,
@@ -340,9 +362,9 @@ async function extractWithOptionalUserAction(
         );
 
       userAction = true;
-      await settlePage(page, signal);
-      extracted = await extractMarkdown(page);
-      decision = decideUserAction(extracted);
+      await runtime.settlePage(page, signal);
+      extracted = await runtime.extractMarkdown(page);
+      decision = runtime.decideUserAction(extracted);
       if (decision.required) {
         throw new Error(
           `read-page still requires user action after confirmation: ${decision.reason || "manual_action_required"}`,
@@ -352,7 +374,8 @@ async function extractWithOptionalUserAction(
 
     return { extracted, userAction };
   } finally {
-    await page.close().catch(() => undefined);
+    await page?.close().catch(() => undefined);
+    await runtime.closeBrowser();
   }
 }
 

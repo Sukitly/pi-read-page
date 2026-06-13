@@ -45,11 +45,11 @@
   ```bash
   bun test
   ```
-- Browser smoke tests are optional unless the change touches browser/runtime/extraction behavior:
+- Browser integration tests are optional unless the change touches browser/runtime/extraction behavior:
   ```bash
-  bun run smoke -- https://example.com
+  bun run integration -- https://example.com
   ```
-- Smoke tests are not a substitute for deterministic unit tests.
+- Integration tests are not a substitute for deterministic unit tests.
 - Fix all lint/type/test errors before committing.
 
 ## Dependency and Lockfile Rules
@@ -79,4 +79,4 @@ Prioritize deterministic unit tests for:
 - Cache integrity and corrupt-cache behavior.
 - Output/cache status semantics.
 
-Use browser smoke tests only for integration confidence around Playwright, Defuddle, and real pages.
+Use browser integration tests only for end-to-end confidence around Playwright, Defuddle, and real pages.

@@ -4,7 +4,7 @@ import { decideUserAction, extractMarkdown } from "../src/browser/extractor";
 async function main() {
   const url = process.argv[2];
   if (!url) {
-    console.error("Usage: npm run smoke -- <url>");
+    console.error("Usage: bun run integration -- <url>");
     process.exit(1);
   }
 

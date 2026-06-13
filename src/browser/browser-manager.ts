@@ -1,13 +1,21 @@
-import { mkdir, mkdtemp } from "node:fs/promises";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { type BrowserContext, chromium, type Page } from "playwright-core";
 import { assertHttpUrlAllowed, isHttpLikeUrl } from "../security/url-policy";
 
-let context: BrowserContext | undefined;
-let contextPromise: Promise<BrowserContext> | undefined;
-let activeProfileDir: string | undefined;
-let usingTemporaryProfile = false;
+type ManagedBrowserContext = {
+  context: BrowserContext;
+  profileDir: string;
+  temporaryProfileDir?: string;
+};
+
+type BrowserAutomation = Pick<typeof chromium, "launchPersistentContext">;
+
+let browserAutomation: BrowserAutomation = chromium;
+let managedContext: ManagedBrowserContext | undefined;
+let managedContextPromise: Promise<ManagedBrowserContext> | undefined;
+let contextGeneration = 0;
 
 function expandHome(path: string): string {
   if (path === "~") return homedir();
@@ -19,30 +27,45 @@ function defaultProfileDir(): string {
   return resolve(homedir(), ".pi", "agent", "read-page", "browser-profile");
 }
 
-async function getContext(): Promise<BrowserContext> {
-  if (context) return context;
-  contextPromise ??= createContext();
+async function getContext(signal?: AbortSignal): Promise<BrowserContext> {
+  throwIfAborted(signal, "read-page aborted before opening browser");
+  if (managedContext) return managedContext.context;
+
+  const generation = contextGeneration;
+  if (!managedContextPromise) managedContextPromise = createManagedContext();
+  const startup = managedContextPromise;
 
   try {
-    context = await contextPromise;
-    return context;
+    const created = await abortable(
+      startup,
+      signal,
+      "read-page aborted while starting browser",
+      closeManagedContext,
+    );
+
+    if (generation !== contextGeneration) {
+      throw new Error("read-page browser context closed during startup");
+    }
+
+    managedContext = created;
+    return created.context;
   } catch (error) {
-    contextPromise = undefined;
+    if (managedContextPromise === startup) managedContextPromise = undefined;
     throw error;
   }
 }
 
-async function createContext(): Promise<BrowserContext> {
+async function createManagedContext(): Promise<ManagedBrowserContext> {
   const profileDir = expandHome(
     process.env.READ_PAGE_PROFILE_DIR || defaultProfileDir(),
   );
   await mkdir(profileDir, { recursive: true });
 
   try {
-    const browserContext = await launchPersistent(profileDir);
-    activeProfileDir = profileDir;
-    usingTemporaryProfile = false;
-    return browserContext;
+    return {
+      context: await launchPersistent(profileDir),
+      profileDir,
+    };
   } catch (error) {
     if (
       !isProfileInUseError(error) ||
@@ -51,25 +74,41 @@ async function createContext(): Promise<BrowserContext> {
       throw error;
     }
 
-    const tempProfileDir = await mkdtemp(join(tmpdir(), "read-page-profile-"));
-    const browserContext = await launchPersistent(tempProfileDir);
-    activeProfileDir = tempProfileDir;
-    usingTemporaryProfile = true;
-    return browserContext;
+    const temporaryProfileDir = await mkdtemp(
+      join(tmpdir(), "read-page-profile-"),
+    );
+    try {
+      return {
+        context: await launchPersistent(temporaryProfileDir),
+        profileDir: temporaryProfileDir,
+        temporaryProfileDir,
+      };
+    } catch (tempError) {
+      await removeTemporaryProfile(temporaryProfileDir);
+      throw tempError;
+    }
   }
 }
 
 async function launchPersistent(profileDir: string): Promise<BrowserContext> {
-  const browserContext = await chromium.launchPersistentContext(profileDir, {
-    headless: false,
-    channel: process.env.READ_PAGE_BROWSER_CHANNEL || "chrome",
-    executablePath: process.env.READ_PAGE_CHROME_PATH || undefined,
-    viewport: null,
-    args: ["--disable-blink-features=AutomationControlled"],
-  });
+  const browserContext = await browserAutomation.launchPersistentContext(
+    profileDir,
+    {
+      headless: false,
+      channel: process.env.READ_PAGE_BROWSER_CHANNEL || "chrome",
+      executablePath: process.env.READ_PAGE_CHROME_PATH || undefined,
+      viewport: null,
+      args: ["--disable-blink-features=AutomationControlled"],
+    },
+  );
 
-  await installNetworkPolicy(browserContext);
-  return browserContext;
+  try {
+    await installNetworkPolicy(browserContext);
+    return browserContext;
+  } catch (error) {
+    await browserContext.close().catch(() => undefined);
+    throw error;
+  }
 }
 
 async function installNetworkPolicy(
@@ -98,55 +137,103 @@ function isProfileInUseError(error: unknown): boolean {
   );
 }
 
+export function setBrowserAutomationForTest(
+  automation: BrowserAutomation | undefined,
+): void {
+  browserAutomation = automation ?? chromium;
+}
+
 export function getBrowserRuntimeInfo() {
   return {
-    profileDir: activeProfileDir,
-    usingTemporaryProfile,
+    profileDir: managedContext?.profileDir,
+    usingTemporaryProfile: managedContext?.temporaryProfileDir !== undefined,
   };
 }
 
 export async function closeBrowser(): Promise<void> {
-  const current = context;
-  context = undefined;
-  contextPromise = undefined;
-  activeProfileDir = undefined;
-  usingTemporaryProfile = false;
-  await current?.close().catch(() => undefined);
+  contextGeneration += 1;
+  const current = managedContext;
+  const startup = managedContextPromise;
+  managedContext = undefined;
+  managedContextPromise = undefined;
+
+  if (current) await closeManagedContext(current);
+  if (!startup) return;
+
+  const created = await startup.catch(() => undefined);
+  if (created && created.context !== current?.context) {
+    await closeManagedContext(created);
+  }
 }
 
 export async function openPage(
   url: string,
   signal?: AbortSignal,
 ): Promise<Page> {
-  if (signal?.aborted)
-    throw new Error("read-page aborted before opening browser");
+  throwIfAborted(signal, "read-page aborted before opening browser");
 
-  await assertHttpUrlAllowed(url);
-  const browserContext = await getContext();
-  const page = await browserContext.newPage();
+  await abortable(
+    assertHttpUrlAllowed(url),
+    signal,
+    "read-page aborted while validating URL",
+  );
+  const browserContext = await getContext(signal);
+  const page = await abortable(
+    browserContext.newPage(),
+    signal,
+    "read-page aborted while opening page",
+    async (createdPage) => {
+      await createdPage.close().catch(() => undefined);
+    },
+  );
 
-  await page.goto(url, { waitUntil: "domcontentloaded", timeout: 45_000 });
-  await assertHttpUrlAllowed(page.url());
-  await settlePage(page, signal);
-  await assertHttpUrlAllowed(page.url());
-  return page;
+  let shouldClosePage = true;
+  try {
+    await abortable(
+      page.goto(url, { waitUntil: "domcontentloaded", timeout: 45_000 }),
+      signal,
+      "read-page aborted while navigating page",
+    );
+    await abortable(
+      assertHttpUrlAllowed(page.url()),
+      signal,
+      "read-page aborted while validating final URL",
+    );
+    await settlePage(page, signal);
+    await abortable(
+      assertHttpUrlAllowed(page.url()),
+      signal,
+      "read-page aborted while validating settled URL",
+    );
+    shouldClosePage = false;
+    return page;
+  } finally {
+    if (shouldClosePage) await page.close().catch(() => undefined);
+  }
 }
 
 export async function settlePage(
   page: Page,
   signal?: AbortSignal,
 ): Promise<void> {
-  if (signal?.aborted)
-    throw new Error("read-page aborted while waiting for page");
+  throwIfAborted(signal, "read-page aborted while waiting for page");
 
-  await page
-    .waitForLoadState("networkidle", { timeout: 8_000 })
-    .catch(() => undefined);
-  await page.waitForTimeout(750);
+  await abortable(
+    page.waitForLoadState("networkidle", { timeout: 8_000 }),
+    signal,
+    "read-page aborted while waiting for page",
+  ).catch((error) => {
+    if (isAbortError(error)) throw error;
+  });
+  await abortable(
+    page.waitForTimeout(750),
+    signal,
+    "read-page aborted while waiting for page",
+  );
 
   // Read-only lazy-load trigger. No clicks, no typing, no submission.
-  await page
-    .evaluate(async () => {
+  await abortable(
+    page.evaluate(async () => {
       const delay = (ms: number) =>
         new Promise((resolve) => setTimeout(resolve, ms));
       const maxY = Math.max(
@@ -159,8 +246,84 @@ export async function settlePage(
         await delay(80);
       }
       window.scrollTo(0, 0);
-    })
-    .catch(() => undefined);
+    }),
+    signal,
+    "read-page aborted while preparing page",
+  ).catch((error) => {
+    if (isAbortError(error)) throw error;
+  });
 
-  await page.waitForTimeout(300);
+  await abortable(
+    page.waitForTimeout(300),
+    signal,
+    "read-page aborted while waiting for page",
+  );
+}
+
+async function closeManagedContext(
+  browserContext: ManagedBrowserContext,
+): Promise<void> {
+  await browserContext.context.close().catch(() => undefined);
+  if (browserContext.temporaryProfileDir) {
+    await removeTemporaryProfile(browserContext.temporaryProfileDir);
+  }
+}
+
+async function removeTemporaryProfile(profileDir: string): Promise<void> {
+  await rm(profileDir, { recursive: true, force: true }).catch(() => undefined);
+}
+
+function throwIfAborted(
+  signal: AbortSignal | undefined,
+  message: string,
+): void {
+  if (signal?.aborted) throw abortError(message);
+}
+
+async function abortable<T>(
+  promise: Promise<T>,
+  signal: AbortSignal | undefined,
+  message: string,
+  cleanup?: (value: T) => Promise<void> | void,
+): Promise<T> {
+  if (!signal) return promise;
+
+  let aborted = signal.aborted;
+  let removeAbortListener: () => void = () => undefined;
+  const trackedPromise = promise.then((value) => {
+    if (aborted && cleanup) {
+      void Promise.resolve(cleanup(value)).catch(() => undefined);
+    }
+    return value;
+  });
+  void trackedPromise.catch(() => undefined);
+
+  if (aborted) throw abortError(message);
+
+  const abortPromise = new Promise<never>((_resolve, reject) => {
+    const onAbort = () => {
+      aborted = true;
+      reject(abortError(message));
+    };
+    signal.addEventListener("abort", onAbort, { once: true });
+    removeAbortListener = () => {
+      signal.removeEventListener("abort", onAbort);
+    };
+  });
+
+  try {
+    return await Promise.race([trackedPromise, abortPromise]);
+  } finally {
+    removeAbortListener();
+  }
+}
+
+function abortError(message: string): Error {
+  const error = new Error(message);
+  error.name = "AbortError";
+  return error;
+}
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof Error && error.name === "AbortError";
 }

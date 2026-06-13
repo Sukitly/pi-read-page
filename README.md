@@ -74,10 +74,10 @@ bun install
 pi -e .
 ```
 
-Smoke test without pi:
+Integration test without pi:
 
 ```bash
-bun run smoke -- https://example.com
+bun run integration -- https://example.com
 ```
 
 ## Environment
