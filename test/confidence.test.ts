@@ -60,6 +60,27 @@ describe("confidence and handoff", () => {
     expect(decideUserAction(extracted).required).toBe(false);
   });
 
+  it("does not hand off a long article that merely discusses captcha or cloudflare", () => {
+    const body = `${"This article explains how recaptcha, hcaptcha, and cloudflare just a moment interstitials work in depth. ".repeat(
+      40,
+    )}`;
+    const extracted = withConfidence({
+      title: "How reCAPTCHA and Cloudflare anti-bot challenges work",
+      markdown: body,
+      contentHtml: `<article><p>${body}</p></article>`,
+      metadata: { ...page({}).metadata, wordCount: 600 },
+    });
+    expect(extracted.markdown.length).toBeGreaterThan(1_200);
+    const decision = decideUserAction(extracted);
+    expect(decision.required).toBe(false);
+    expect(extracted.confidence.reasons).toContain(
+      "captcha_or_human_verification_detected",
+    );
+    expect(extracted.confidence.reasons).toContain(
+      "anti_bot_or_access_block_detected",
+    );
+  });
+
   it("hands off captcha pages", () => {
     const extracted = withConfidence({
       markdown: "Please verify you are human",

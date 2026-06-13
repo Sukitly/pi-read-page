@@ -2,6 +2,10 @@ import { createHash } from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
+import {
+  DEFAULT_MAX_BYTES,
+  truncateHead,
+} from "@earendil-works/pi-coding-agent";
 import type { NormalizedUrl, UrlNormalization } from "../security/url-policy";
 import type { ConfidenceReport, PageMetadata } from "../types";
 
@@ -59,6 +63,9 @@ export type Pagination = {
   shownStart: number;
   shownEnd: number;
   nextOffset?: number;
+  truncated: boolean;
+  shownBytes: number;
+  totalBytes: number;
 };
 
 export function sha256(input: string): string {
@@ -111,6 +118,7 @@ export function paginate(
   markdown: string,
   offset: number,
   limit: number,
+  maxBytes: number = DEFAULT_MAX_BYTES,
 ): Pagination {
   const lines = markdown.split(/\r?\n/);
   const totalLines = lines.length;
@@ -121,18 +129,32 @@ export function paginate(
       totalLines,
       shownStart: totalLines + 1,
       shownEnd: totalLines,
+      truncated: false,
+      shownBytes: 0,
+      totalBytes: 0,
     };
   }
   const endIndex = Math.min(totalLines, startIndex + limit);
+  const windowText = lines.slice(startIndex, endIndex).join("\n");
+  // Truncate the selected window by bytes here so nextOffset reflects the lines
+  // actually emitted. Computing nextOffset from the full line window would
+  // permanently skip any tail lines dropped by byte truncation.
+  const truncation = truncateHead(windowText, { maxBytes });
+  // Math.max(1, ...) guarantees forward progress even when a single oversized
+  // line yields zero output lines, avoiding a nextOffset === offset loop.
+  const shownLineCount = truncation.truncated
+    ? Math.max(1, truncation.outputLines)
+    : endIndex - startIndex;
+  const shownEnd = startIndex + shownLineCount;
   return {
-    selected:
-      startIndex < totalLines
-        ? lines.slice(startIndex, endIndex).join("\n")
-        : "",
+    selected: truncation.content,
     totalLines,
-    shownStart: totalLines === 0 ? 0 : Math.min(offset, totalLines),
-    shownEnd: totalLines === 0 ? 0 : endIndex,
-    nextOffset: endIndex < totalLines ? endIndex + 1 : undefined,
+    shownStart: Math.min(offset, totalLines),
+    shownEnd,
+    nextOffset: shownEnd < totalLines ? shownEnd + 1 : undefined,
+    truncated: truncation.truncated,
+    shownBytes: truncation.outputBytes,
+    totalBytes: truncation.totalBytes,
   };
 }
 

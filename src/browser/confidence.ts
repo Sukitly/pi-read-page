@@ -113,15 +113,19 @@ function detectActionableHandoff(
   const markdown = page.markdown.trim();
   const sample =
     `${page.url}\n${page.title}\n${markdown.slice(0, 10_000)}`.toLowerCase();
+  const wordCount = page.metadata.wordCount || estimateWordCount(markdown);
+  // Captcha/anti-bot/login handoff is only actionable when the extracted body is
+  // thin. A long article that merely discusses these topics is not user-actionable.
+  const contentIsThin = wordCount < 120 || markdown.length < 1_200;
 
-  if (CAPTCHA_RE.test(sample)) {
+  if (contentIsThin && CAPTCHA_RE.test(sample)) {
     return {
       reason: "captcha",
       message: "The page appears to require captcha or human verification.",
     };
   }
 
-  if (BLOCK_RE.test(sample)) {
+  if (contentIsThin && BLOCK_RE.test(sample)) {
     return {
       reason: "blocked",
       message:
@@ -129,13 +133,7 @@ function detectActionableHandoff(
     };
   }
 
-  if (
-    isLoginWall(
-      page,
-      markdown.length,
-      page.metadata.wordCount || estimateWordCount(markdown),
-    )
-  ) {
+  if (isLoginWall(page, markdown.length, wordCount)) {
     return {
       reason: "login_required",
       message:

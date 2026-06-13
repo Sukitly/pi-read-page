@@ -20,6 +20,13 @@ export function prepareHtmlForExtraction(
 ): { document: Document; cleanedHtml: string } {
   const { document, baseUrl } = parseDocument(html, url);
   absolutizeUrls(document, baseUrl);
+  // Strip executable/style nodes from the document we hand back. Extractor
+  // fallbacks read from this document (body innerHTML / textContent), so leaving
+  // script source in place would leak untrusted code into the extracted output.
+  // Defuddle receives cleanedHtml (a string), not this object.
+  document.querySelectorAll("script, style, noscript").forEach((element) => {
+    element.remove();
+  });
 
   return {
     document: document as unknown as Document,

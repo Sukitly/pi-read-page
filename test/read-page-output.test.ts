@@ -1,6 +1,6 @@
 import { DEFAULT_MAX_BYTES } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it } from "vitest";
-import { type CacheMeta, type Pagination, sha256 } from "../src/cache/cache";
+import { type CacheMeta, paginate, sha256 } from "../src/cache/cache";
 import { formatDocument, makeDetails } from "../src/tools/read-page";
 
 function metaFor(url: string): CacheMeta {
@@ -48,15 +48,12 @@ function metaFor(url: string): CacheMeta {
 }
 
 describe("read-page output formatting", () => {
-  it("truncates an oversized selected page by bytes and reports it in details", () => {
+  it("surfaces a byte-truncated page from pagination in output and details", () => {
     const url = "https://example.com/article";
     const oversizedLine = `${"x".repeat(DEFAULT_MAX_BYTES + 1024)}TAIL`;
-    const pagination: Pagination = {
-      selected: oversizedLine,
-      totalLines: 1,
-      shownStart: 1,
-      shownEnd: 1,
-    };
+    const markdown = `${oversizedLine}\nkept-second-line`;
+    const pagination = paginate(markdown, 1, 10);
+    expect(pagination.truncated).toBe(true);
     const meta = metaFor(url);
     const normalized = {
       inputUrl: url,
@@ -66,7 +63,7 @@ describe("read-page output formatting", () => {
 
     const output = formatDocument({
       normalized,
-      markdown: "cached markdown",
+      markdown,
       pagination,
       meta,
       cacheStatus: "miss",

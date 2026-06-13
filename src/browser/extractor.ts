@@ -32,7 +32,7 @@ export async function extractMarkdown(page: Page): Promise<ExtractedPage> {
 
   const contentHtml = result.content || document.body?.innerHTML || "";
   const markdown = (
-    result.contentMarkdown || htmlToPlainMarkdown(contentHtml, url)
+    result.contentMarkdown || structuredTextFallback(contentHtml, url)
   ).trim();
   const textLength = cleanText(markdown).length;
   const metadata = buildMetadata(result);
@@ -140,10 +140,6 @@ function buildWarnings(
   if (!result.title) warnings.push("No title extracted.");
 
   return warnings;
-}
-
-function htmlToPlainMarkdown(html: string, url: string): string {
-  return structuredTextFallback(html, url);
 }
 
 function structuredTextFallback(html: string, url: string): string {
