@@ -14,10 +14,10 @@ export async function waitForUserAction(
     );
   }
 
-  const statusKey = "web-read";
+  const statusKey = "read-page";
   ctx.ui.setStatus(statusKey, "Waiting for browser action");
   ctx.ui.setWidget(statusKey, [
-    "web_read needs user action.",
+    "read-page needs user action.",
     `Reason: ${reason}`,
     `URL: ${url}`,
     "Finish the action in the opened browser, then confirm here.",
@@ -25,7 +25,7 @@ export async function waitForUserAction(
 
   try {
     return await ctx.ui.confirm(
-      "web_read needs user action",
+      "read-page needs user action",
       [
         message,
         "",

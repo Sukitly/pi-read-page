@@ -70,13 +70,13 @@ async function parseWithDefuddle(
   html: string,
   url: string,
 ): Promise<{ result: DefuddleResponse; parseMode: ParseMode }> {
-  const allowThirdPartyAsync = process.env.WEB_READ_DEFUDDLE_ASYNC === "1";
+  const allowThirdPartyAsync = process.env.READ_PAGE_DEFUDDLE_ASYNC === "1";
   const timeoutMs =
-    Number.parseInt(process.env.WEB_READ_PARSE_TIMEOUT_MS || "", 10) ||
+    Number.parseInt(process.env.READ_PAGE_PARSE_TIMEOUT_MS || "", 10) ||
     DEFAULT_PARSE_TIMEOUT_MS;
   const options: DefuddleOptions = {
     url,
-    debug: process.env.WEB_READ_DEFUDDLE_DEBUG === "1",
+    debug: process.env.READ_PAGE_DEFUDDLE_DEBUG === "1",
     useAsync: allowThirdPartyAsync,
     includeReplies: "extractors",
     separateMarkdown: true,

@@ -54,7 +54,7 @@ function metaFor(url: string, markdown: string): CacheMeta {
 
 describe("cache integrity", () => {
   it("loads valid cached content", async () => {
-    const dir = await mkdtemp(path.join(tmpdir(), "web-read-cache-test-"));
+    const dir = await mkdtemp(path.join(tmpdir(), "read-page-cache-test-"));
     const mdPath = path.join(dir, "content.md");
     const metaPath = path.join(dir, "meta.json");
     const url = "https://example.com";
@@ -68,7 +68,7 @@ describe("cache integrity", () => {
   });
 
   it("rejects checksum mismatch instead of treating it as a normal miss", async () => {
-    const dir = await mkdtemp(path.join(tmpdir(), "web-read-cache-test-"));
+    const dir = await mkdtemp(path.join(tmpdir(), "read-page-cache-test-"));
     const mdPath = path.join(dir, "content.md");
     const metaPath = path.join(dir, "meta.json");
     const url = "https://example.com";

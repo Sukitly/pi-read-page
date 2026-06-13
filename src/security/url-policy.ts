@@ -101,7 +101,7 @@ async function enforceDnsPolicy(host: string): Promise<void> {
   for (const record of records) {
     if (isPrivateIp(record.address)) {
       throw new Error(
-        `Refusing hostname ${host} because DNS resolved to private/local address ${record.address}. Set WEB_READ_ALLOW_PRIVATE_NETWORK=1 to allow it explicitly.`,
+        `Refusing hostname ${host} because DNS resolved to private/local address ${record.address}. Set READ_PAGE_ALLOW_PRIVATE_NETWORK=1 to allow it explicitly.`,
       );
     }
   }
@@ -118,13 +118,13 @@ function enforceHostPolicy(hostname: string): void {
     host.endsWith(".internal")
   ) {
     throw new Error(
-      `Refusing private/local hostname: ${hostname}. Set WEB_READ_ALLOW_PRIVATE_NETWORK=1 to allow it explicitly.`,
+      `Refusing private/local hostname: ${hostname}. Set READ_PAGE_ALLOW_PRIVATE_NETWORK=1 to allow it explicitly.`,
     );
   }
 
   if (isIP(host) && isPrivateIp(host)) {
     throw new Error(
-      `Refusing private/local IP address: ${hostname}. Set WEB_READ_ALLOW_PRIVATE_NETWORK=1 to allow it explicitly.`,
+      `Refusing private/local IP address: ${hostname}. Set READ_PAGE_ALLOW_PRIVATE_NETWORK=1 to allow it explicitly.`,
     );
   }
 }
@@ -180,7 +180,7 @@ function normalizeHost(hostname: string): string {
 }
 
 function allowsPrivateNetwork(): boolean {
-  return process.env.WEB_READ_ALLOW_PRIVATE_NETWORK === "1";
+  return process.env.READ_PAGE_ALLOW_PRIVATE_NETWORK === "1";
 }
 
 function errorMessage(error: unknown): string {

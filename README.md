@@ -1,21 +1,21 @@
-# pi-web-read
+# pi-read-page
 
-Browser-backed `web_read(url)` extension for pi.
+Browser-backed `read-page(url)` extension for pi.
 
-Goal: make web reading feel like `read_url`, but fall back to a real local browser when pages need JavaScript, login state, captcha handling, or manual navigation.
+Goal: read webpages with a real local browser when pages need JavaScript, login state, captcha handling, or manual navigation.
 
 ## Contract
 
 Only one Agent-facing tool is exposed:
 
 ```text
-web_read(url, offset?, limit?, refresh?, preserveQuery?)
+read-page(url, offset?, limit?, refresh?, preserveQuery?)
 ```
 
 Default usage still only needs a URL:
 
 ```text
-web_read({ url: "https://example.com" })
+read-page({ url: "https://example.com" })
 ```
 
 It is read-only by capability design:
@@ -34,7 +34,7 @@ It is read-only by capability design:
 
 Cache:
 
-- Successful browser extractions are cached at `~/.pi/agent/caches/web-read`.
+- Successful browser extractions are cached at `~/.pi/agent/caches/read-page`.
 - Normal TTL: 30 days.
 - User-action TTL: 1 day.
 - Cache files: `content.md` + `meta.json`.
@@ -62,14 +62,14 @@ Playwright headed browser
 
 Default privacy stance:
 
-- `WEB_READ_DEFUDDLE_ASYNC` defaults to off.
-- Defuddle third-party async fallback is only enabled with `WEB_READ_DEFUDDLE_ASYNC=1`.
-- Private/local hosts and IPs are refused by default. Use `WEB_READ_ALLOW_PRIVATE_NETWORK=1` only when intentionally reading local services.
+- `READ_PAGE_DEFUDDLE_ASYNC` defaults to off.
+- Defuddle third-party async fallback is only enabled with `READ_PAGE_DEFUDDLE_ASYNC=1`.
+- Private/local hosts and IPs are refused by default. Use `READ_PAGE_ALLOW_PRIVATE_NETWORK=1` only when intentionally reading local services.
 
 ## Development
 
 ```bash
-cd /Users/sukit/Codes/open-source/pi-web-read
+cd /Users/sukit/Codes/open-source/pi-read-page
 bun install
 pi -e .
 ```
@@ -85,20 +85,20 @@ bun run smoke -- https://example.com
 Optional:
 
 ```bash
-WEB_READ_CHROME_PATH=/Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome
-WEB_READ_BROWSER_CHANNEL=chrome
-WEB_READ_PROFILE_DIR=~/.pi/agent/web-read/browser-profile
-WEB_READ_PARSE_TIMEOUT_MS=8000
-WEB_READ_DEFUDDLE_DEBUG=1
-WEB_READ_DEFUDDLE_ASYNC=1
-WEB_READ_DISABLE_TEMP_PROFILE_FALLBACK=1
-WEB_READ_ALLOW_PRIVATE_NETWORK=1
+READ_PAGE_CHROME_PATH=/Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome
+READ_PAGE_BROWSER_CHANNEL=chrome
+READ_PAGE_PROFILE_DIR=~/.pi/agent/read-page/browser-profile
+READ_PAGE_PARSE_TIMEOUT_MS=8000
+READ_PAGE_DEFUDDLE_DEBUG=1
+READ_PAGE_DEFUDDLE_ASYNC=1
+READ_PAGE_DISABLE_TEMP_PROFILE_FALLBACK=1
+READ_PAGE_ALLOW_PRIVATE_NETWORK=1
 ```
 
 Defaults:
 
 - headed browser
-- persistent browser profile at `~/.pi/agent/web-read/browser-profile`
+- persistent browser profile at `~/.pi/agent/read-page/browser-profile`
 - browser channel `chrome`
 - temporary profile fallback if the persistent profile is already locked
 

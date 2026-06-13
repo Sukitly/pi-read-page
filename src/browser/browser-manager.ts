@@ -16,7 +16,7 @@ function expandHome(path: string): string {
 }
 
 function defaultProfileDir(): string {
-  return resolve(homedir(), ".pi", "agent", "web-read", "browser-profile");
+  return resolve(homedir(), ".pi", "agent", "read-page", "browser-profile");
 }
 
 async function getContext(): Promise<BrowserContext> {
@@ -34,7 +34,7 @@ async function getContext(): Promise<BrowserContext> {
 
 async function createContext(): Promise<BrowserContext> {
   const profileDir = expandHome(
-    process.env.WEB_READ_PROFILE_DIR || defaultProfileDir(),
+    process.env.READ_PAGE_PROFILE_DIR || defaultProfileDir(),
   );
   await mkdir(profileDir, { recursive: true });
 
@@ -46,14 +46,12 @@ async function createContext(): Promise<BrowserContext> {
   } catch (error) {
     if (
       !isProfileInUseError(error) ||
-      process.env.WEB_READ_DISABLE_TEMP_PROFILE_FALLBACK === "1"
+      process.env.READ_PAGE_DISABLE_TEMP_PROFILE_FALLBACK === "1"
     ) {
       throw error;
     }
 
-    const tempProfileDir = await mkdtemp(
-      join(tmpdir(), "pi-web-read-profile-"),
-    );
+    const tempProfileDir = await mkdtemp(join(tmpdir(), "read-page-profile-"));
     const browserContext = await launchPersistent(tempProfileDir);
     activeProfileDir = tempProfileDir;
     usingTemporaryProfile = true;
@@ -64,8 +62,8 @@ async function createContext(): Promise<BrowserContext> {
 async function launchPersistent(profileDir: string): Promise<BrowserContext> {
   const browserContext = await chromium.launchPersistentContext(profileDir, {
     headless: false,
-    channel: process.env.WEB_READ_BROWSER_CHANNEL || "chrome",
-    executablePath: process.env.WEB_READ_CHROME_PATH || undefined,
+    channel: process.env.READ_PAGE_BROWSER_CHANNEL || "chrome",
+    executablePath: process.env.READ_PAGE_CHROME_PATH || undefined,
     viewport: null,
     args: ["--disable-blink-features=AutomationControlled"],
   });
@@ -121,7 +119,7 @@ export async function openPage(
   signal?: AbortSignal,
 ): Promise<Page> {
   if (signal?.aborted)
-    throw new Error("web_read aborted before opening browser");
+    throw new Error("read-page aborted before opening browser");
 
   await assertHttpUrlAllowed(url);
   const browserContext = await getContext();
@@ -139,7 +137,7 @@ export async function settlePage(
   signal?: AbortSignal,
 ): Promise<void> {
   if (signal?.aborted)
-    throw new Error("web_read aborted while waiting for page");
+    throw new Error("read-page aborted while waiting for page");
 
   await page
     .waitForLoadState("networkidle", { timeout: 8_000 })

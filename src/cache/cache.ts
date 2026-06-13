@@ -10,13 +10,13 @@ export const CACHE_DIR = path.join(
   ".pi",
   "agent",
   "caches",
-  "web-read",
+  "read-page",
 );
 export const DEFAULT_TTL_DAYS = 30;
 export const USER_ACTION_TTL_DAYS = 1;
 
-export type WebReadCacheSource = "browser";
-export type WebReadCacheStatus =
+export type ReadPageCacheSource = "browser";
+export type ReadPageCacheStatus =
   | "hit"
   | "miss"
   | "refresh"
@@ -31,7 +31,7 @@ export type CacheMeta = {
   cache_key: string;
   url_sha256: string;
   normalization: UrlNormalization;
-  source: WebReadCacheSource;
+  source: ReadPageCacheSource;
   extractor: "defuddle";
   extraction: string;
   parse_mode: string;
@@ -145,7 +145,7 @@ export async function loadCached(
   } catch (error) {
     if (!isNotFoundError(error)) {
       console.warn(
-        `[web_read] Ignoring corrupt cache for ${url}: ${errorMessage(error)}`,
+        `[read-page] Ignoring corrupt cache for ${url}: ${errorMessage(error)}`,
       );
     }
     return undefined;

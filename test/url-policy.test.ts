@@ -5,12 +5,12 @@ import {
 } from "../src/security/url-policy";
 
 describe("normalizeHttpUrl", () => {
-  const oldAllow = process.env.WEB_READ_ALLOW_PRIVATE_NETWORK;
+  const oldAllow = process.env.READ_PAGE_ALLOW_PRIVATE_NETWORK;
 
   afterEach(() => {
     if (oldAllow === undefined)
-      delete process.env.WEB_READ_ALLOW_PRIVATE_NETWORK;
-    else process.env.WEB_READ_ALLOW_PRIVATE_NETWORK = oldAllow;
+      delete process.env.READ_PAGE_ALLOW_PRIVATE_NETWORK;
+    else process.env.READ_PAGE_ALLOW_PRIVATE_NETWORK = oldAllow;
   });
 
   it("canonicalizes fragment, query, hostname, and trailing slash by default", () => {
@@ -57,7 +57,7 @@ describe("normalizeHttpUrl", () => {
   });
 
   it("allows private network only with explicit opt-in", () => {
-    process.env.WEB_READ_ALLOW_PRIVATE_NETWORK = "1";
+    process.env.READ_PAGE_ALLOW_PRIVATE_NETWORK = "1";
     expect(
       normalizeHttpUrl("http://127.0.0.1:3000/a", { preserveQuery: false }).url,
     ).toBe("http://127.0.0.1:3000/a");

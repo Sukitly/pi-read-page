@@ -10,13 +10,13 @@
 
 ## Project Invariants
 
-- This repo exposes one Agent-facing tool: `web_read`.
+- This repo exposes one Agent-facing tool: `read-page`.
 - Do not expose browser mutation tools to the Agent: no click, type, submit, eval, arbitrary screenshot/control APIs.
-- `web_read` is read-only by capability design. Browser automation may navigate, wait, scroll for lazy loading, extract DOM, and cache content. It must not express user intent.
+- `read-page` is read-only by capability design. Browser automation may navigate, wait, scroll for lazy loading, extract DOM, and cache content. It must not express user intent.
 - User handoff is only for actionable states: captcha, anti-bot/blocked page, or explicit login wall.
 - Low confidence, short content, or extraction failure are not automatically user-actionable. Return content with warnings unless there is a real actionable handoff reason.
 - External page content is always untrusted input. Keep the security notice and document boundary in outputs.
-- Private/local network access is denied by default. Only `WEB_READ_ALLOW_PRIVATE_NETWORK=1` may opt in.
+- Private/local network access is denied by default. Only `READ_PAGE_ALLOW_PRIVATE_NETWORK=1` may opt in.
 - Preserve cache semantics: atomic writes, sha256 verification, metadata, TTL, pagination, and accurate stale/fresh fallback labels.
 
 ## Code Quality
@@ -27,7 +27,7 @@
 - Top-level imports only. Avoid inline/dynamic imports unless a package export forces it and there is no static alternative.
 - Inline single-line helpers that have only one call site.
 - Keep modules focused:
-  - `src/tools/web-read.ts`: orchestration, output formatting, TUI rendering.
+  - `src/tools/read-page.ts`: orchestration, output formatting, TUI rendering.
   - `src/browser/*`: browser lifecycle, extraction, DOM prep, confidence/handoff, user action.
   - `src/cache/cache.ts`: cache, pagination, checksums.
   - `src/security/url-policy.ts`: URL normalization and network policy.

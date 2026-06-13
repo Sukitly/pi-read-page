@@ -1,5 +1,5 @@
 {
-  "name": "pi-web-read",
+  "name": "pi-read-page",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -8,19 +8,19 @@
   ],
   "pi": {
     "extensions": [
-      "./extensions/web-read.ts"
+      "./extensions/pi-read-page.ts"
     ]
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "smoke": "tsx scripts/smoke-web-read.ts",
+    "smoke": "tsx scripts/smoke-read-page.ts",
     "lint": "bun run typecheck && bunx --bun @biomejs/biome check --error-on-warnings --write ."
   },
   "dependencies": {
     "defuddle": "^0.18.1",
     "linkedom": "^0.18.12",
-    "playwright-core": "^1.52.0"
+    "playwright-core": "^1.60.0"
   },
   "peerDependencies": {
     "@earendil-works/pi-coding-agent": "*",
@@ -28,13 +28,13 @@
     "typebox": "*"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.4.16",
-    "@earendil-works/pi-coding-agent": "^0.77.0",
-    "@earendil-works/pi-tui": "^0.77.0",
-    "@types/node": "^22.0.0",
-    "tsx": "^4.19.0",
-    "typebox": "^1.1.39",
-    "typescript": "^5.8.0",
-    "vitest": "^4.0.18"
+    "@biomejs/biome": "2.5.0",
+    "@earendil-works/pi-coding-agent": "^0.79.2",
+    "@earendil-works/pi-tui": "^0.79.2",
+    "@types/node": "^25.9.3",
+    "tsx": "^4.22.4",
+    "typebox": "^1.2.8",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.8"
   }
 }
