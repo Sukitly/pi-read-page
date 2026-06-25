@@ -20,16 +20,22 @@ Let [pi](https://github.com/earendil-works/pi-coding-agent) read webpages throug
 
 ## Installation
 
-Install from GitHub:
+Install from npm:
 
 ```bash
-pi install https://github.com/Sukitly/pi-read-page
+pi install npm:pi-read-page
 ```
 
 Try it for one pi run without installing:
 
 ```bash
-pi -e https://github.com/Sukitly/pi-read-page
+pi -e npm:pi-read-page
+```
+
+Install from GitHub if you want the latest repository version:
+
+```bash
+pi install https://github.com/Sukitly/pi-read-page
 ```
 
 Use a local checkout:
@@ -156,6 +162,31 @@ bun run integration -- https://example.com
 ```
 
 The integration test opens a real browser, extracts the page, prints extraction metadata, and closes the browser context.
+
+## Publishing
+
+Pi package catalog entries are discovered from public npm packages with the `pi-package` keyword.
+
+Before publishing:
+
+```bash
+bun run lint
+bun test
+npm pack --dry-run
+```
+
+Publish:
+
+```bash
+npm login
+npm publish --access public
+```
+
+After publishing, install with:
+
+```bash
+pi install npm:pi-read-page
+```
 
 ## Project layout
 
