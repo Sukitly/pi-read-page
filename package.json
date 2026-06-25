@@ -1,6 +1,6 @@
 {
   "name": "pi-read-page",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Read webpages through a local browser and return Markdown for Pi coding agent.",
   "type": "module",
   "license": "MIT",
