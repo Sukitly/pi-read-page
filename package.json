@@ -1,11 +1,36 @@
 {
   "name": "pi-read-page",
   "version": "0.1.0",
-  "private": true,
+  "description": "Read webpages through a local browser and return Markdown for Pi coding agent.",
   "type": "module",
+  "license": "MIT",
+  "author": "Sukitly",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Sukitly/pi-read-page.git"
+  },
+  "homepage": "https://github.com/Sukitly/pi-read-page#readme",
+  "bugs": {
+    "url": "https://github.com/Sukitly/pi-read-page/issues"
+  },
   "keywords": [
-    "pi-package"
+    "pi-package",
+    "pi-extension",
+    "pi",
+    "read-page",
+    "browser",
+    "markdown"
   ],
+  "files": [
+    "extensions",
+    "src",
+    "README.md",
+    "LICENSE",
+    "package.json"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
   "pi": {
     "extensions": [
       "./extensions/pi-read-page.ts"
