@@ -1,5 +1,6 @@
 import type { DefuddleOptions, DefuddleResponse } from "defuddle/full";
 import type { Page } from "playwright-core";
+import { createPolicyFetch } from "../security/url-policy";
 import type { ExtractedPage, PageMetadata, UserActionDecision } from "../types";
 import {
   assessConfidence,
@@ -27,10 +28,11 @@ export async function extractMarkdown(page: Page): Promise<ExtractedPage> {
 
   const url = page.url();
   const rawHtml = await page.content();
-  const { document, cleanedHtml } = prepareHtmlForExtraction(rawHtml, url);
-  const { result, parseMode } = await parseWithDefuddle(cleanedHtml, url);
+  const { fallbackDocument, extractionHtml, sanitizedHtml } =
+    prepareHtmlForExtraction(rawHtml, url);
+  const { result, parseMode } = await parseWithDefuddle(extractionHtml, url);
 
-  const contentHtml = result.content || document.body?.innerHTML || "";
+  const contentHtml = result.content || fallbackDocument.body?.innerHTML || "";
   const markdown = (
     result.contentMarkdown || structuredTextFallback(contentHtml, url)
   ).trim();
@@ -43,7 +45,7 @@ export async function extractMarkdown(page: Page): Promise<ExtractedPage> {
     title,
     markdown,
     contentHtml,
-    fullHtml: cleanedHtml,
+    fullHtml: sanitizedHtml,
     textLength,
     capturedAt: new Date().toISOString(),
     extractor: "defuddle" as const,
@@ -81,6 +83,7 @@ async function parseWithDefuddle(
     includeReplies: "extractors",
     separateMarkdown: true,
     markdown: false,
+    fetch: createPolicyFetch(),
   };
 
   const { Defuddle } = await getDefuddleNodeModule();
@@ -143,16 +146,19 @@ function buildWarnings(
 }
 
 function structuredTextFallback(html: string, url: string): string {
-  const { document } = prepareHtmlForExtraction(`<body>${html}</body>`, url);
+  const { fallbackDocument } = prepareHtmlForExtraction(
+    `<body>${html}</body>`,
+    url,
+  );
   const blocks = Array.from(
-    document.querySelectorAll("h1,h2,h3,h4,h5,h6,p,li,pre,blockquote"),
+    fallbackDocument.querySelectorAll("h1,h2,h3,h4,h5,h6,p,li,pre,blockquote"),
   );
 
   if (blocks.length === 0) {
     return cleanTextPreservingLines(
-      document.body?.textContent ||
-        document.documentElement?.textContent ||
-        document.textContent ||
+      fallbackDocument.body?.textContent ||
+        fallbackDocument.documentElement?.textContent ||
+        fallbackDocument.textContent ||
         "",
     );
   }

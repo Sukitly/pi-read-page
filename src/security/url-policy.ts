@@ -13,7 +13,8 @@ export type NormalizedUrl = {
   normalization: UrlNormalization;
 };
 
-const dnsPolicyCache = new Map<string, Promise<void>>();
+const dnsPolicyChecks = new Map<string, Promise<void>>();
+const MAX_FETCH_REDIRECTS = 20;
 
 export function normalizeHttpUrl(
   input: string,
@@ -53,12 +54,18 @@ export async function assertHttpUrlAllowed(url: string): Promise<void> {
   const host = normalizeHost(parsed.hostname);
   if (isIP(host)) return;
 
-  let cached = dnsPolicyCache.get(host);
-  if (!cached) {
-    cached = enforceDnsPolicy(host);
-    dnsPolicyCache.set(host, cached);
+  const currentCheck = dnsPolicyChecks.get(host);
+  if (currentCheck) {
+    await currentCheck;
+    return;
   }
-  await cached;
+
+  let check!: Promise<void>;
+  check = enforceDnsPolicy(host).finally(() => {
+    if (dnsPolicyChecks.get(host) === check) dnsPolicyChecks.delete(host);
+  });
+  dnsPolicyChecks.set(host, check);
+  await check;
 }
 
 export function isHttpLikeUrl(url: string): boolean {
@@ -68,6 +75,96 @@ export function isHttpLikeUrl(url: string): boolean {
   } catch {
     return false;
   }
+}
+
+export function createPolicyFetch(
+  delegate: typeof globalThis.fetch = globalThis.fetch,
+): typeof globalThis.fetch {
+  return async (input, init) => {
+    const redirectMode = fetchRedirectMode(input, init);
+    if (redirectMode !== "follow") {
+      await assertHttpUrlAllowed(fetchInputUrl(input));
+      return delegate(input, init);
+    }
+
+    let nextInput: RequestInfo | URL = input;
+    let nextInit: RequestInit = { ...init, redirect: "manual" };
+
+    for (let redirects = 0; redirects <= MAX_FETCH_REDIRECTS; redirects += 1) {
+      const currentUrl = fetchInputUrl(nextInput);
+      await assertHttpUrlAllowed(currentUrl);
+      const response = await delegate(nextInput, nextInit);
+      if (!isRedirectResponse(response)) return response;
+
+      const location = response.headers.get("location");
+      if (!location) return response;
+      if (redirects === MAX_FETCH_REDIRECTS) {
+        throw new Error("Fetch redirect limit exceeded");
+      }
+
+      const currentInput = nextInput;
+      nextInput = new URL(location, currentUrl).href;
+      nextInit = nextRedirectInit(currentInput, nextInit, response.status);
+    }
+
+    throw new Error("Fetch redirect limit exceeded");
+  };
+}
+
+function fetchInputUrl(input: RequestInfo | URL): string {
+  if (typeof input === "string") return input;
+  if (input instanceof URL) return input.href;
+  if (typeof input === "object" && input !== null && "url" in input) {
+    const url = input.url;
+    if (typeof url === "string") return url;
+  }
+  throw new Error("Unable to determine fetch request URL");
+}
+
+function fetchRedirectMode(
+  input: RequestInfo | URL,
+  init: RequestInit | undefined,
+): RequestRedirect {
+  if (init?.redirect) return init.redirect;
+  if (typeof input === "object" && input !== null && "redirect" in input) {
+    const redirect = input.redirect;
+    if (
+      redirect === "error" ||
+      redirect === "follow" ||
+      redirect === "manual"
+    ) {
+      return redirect;
+    }
+  }
+  return "follow";
+}
+
+function fetchMethod(input: RequestInfo | URL, init: RequestInit): string {
+  if (init.method) return init.method.toUpperCase();
+  if (typeof input === "object" && input !== null && "method" in input) {
+    const method = input.method;
+    if (typeof method === "string") return method.toUpperCase();
+  }
+  return "GET";
+}
+
+function nextRedirectInit(
+  input: RequestInfo | URL,
+  init: RequestInit,
+  status: number,
+): RequestInit {
+  const method = fetchMethod(input, init);
+  if (
+    status !== 303 &&
+    !((status === 301 || status === 302) && method === "POST")
+  ) {
+    return init;
+  }
+  return { ...init, method: "GET", body: undefined };
+}
+
+function isRedirectResponse(response: Response): boolean {
+  return [301, 302, 303, 307, 308].includes(response.status);
 }
 
 function parseHttpUrl(input: string): URL {
@@ -161,18 +258,78 @@ function isPrivateIPv4(ip: string): boolean {
 }
 
 function isPrivateIPv6(ip: string): boolean {
-  const normalized = ip.toLowerCase();
+  const normalized = normalizeHost(ip).split("%")[0] || "";
+  const mappedIpv4 = ipv4FromMappedIPv6(normalized);
+  if (mappedIpv4) return isPrivateIPv4(mappedIpv4);
+
+  const words = parseIPv6Words(normalized);
+  if (!words) return true;
+  const first = words[0] ?? 0;
   return (
     normalized === "::1" ||
     normalized === "::" ||
-    normalized.startsWith("fe80:") ||
-    normalized.startsWith("fc") ||
-    normalized.startsWith("fd") ||
-    normalized.startsWith("::ffff:127.") ||
-    normalized.startsWith("::ffff:10.") ||
-    normalized.startsWith("::ffff:192.168.") ||
-    normalized.startsWith("::ffff:169.254.")
+    first === 0 ||
+    (first & 0xffc0) === 0xfe80 ||
+    (first & 0xfe00) === 0xfc00 ||
+    (first & 0xff00) === 0xff00
   );
+}
+
+function ipv4FromMappedIPv6(ip: string): string | undefined {
+  const words = parseIPv6Words(ip);
+  if (!words) return undefined;
+  if (words.slice(0, 5).some((word) => word !== 0) || words[5] !== 0xffff) {
+    return undefined;
+  }
+
+  const high = words[6] ?? 0;
+  const low = words[7] ?? 0;
+  return [high >> 8, high & 0xff, low >> 8, low & 0xff].join(".");
+}
+
+function parseIPv6Words(ip: string): number[] | undefined {
+  let input = ip.toLowerCase();
+  if (input.includes(".")) {
+    const lastColon = input.lastIndexOf(":");
+    if (lastColon === -1) return undefined;
+    const ipv4 = input.slice(lastColon + 1);
+    if (isIP(ipv4) !== 4) return undefined;
+    const octets = ipv4.split(".").map((part) => Number.parseInt(part, 10));
+    const [a, b, c, d] = octets;
+    if (
+      a === undefined ||
+      b === undefined ||
+      c === undefined ||
+      d === undefined
+    ) {
+      return undefined;
+    }
+    input = `${input.slice(0, lastColon + 1)}${((a << 8) | b).toString(16)}:${((c << 8) | d).toString(16)}`;
+  }
+
+  const compressionParts = input.split("::");
+  if (compressionParts.length > 2) return undefined;
+
+  const left = parseIPv6Side(compressionParts[0] ?? "");
+  const right = parseIPv6Side(compressionParts[1] ?? "");
+  if (!left || !right) return undefined;
+
+  if (compressionParts.length === 1) {
+    return left.length === 8 ? left : undefined;
+  }
+
+  const missing = 8 - left.length - right.length;
+  if (missing < 1) return undefined;
+  return [...left, ...Array.from({ length: missing }, () => 0), ...right];
+}
+
+function parseIPv6Side(input: string): number[] | undefined {
+  if (!input) return [];
+  const words = input.split(":").map((part) => {
+    if (!/^[0-9a-f]{1,4}$/.test(part)) return Number.NaN;
+    return Number.parseInt(part, 16);
+  });
+  return words.every(Number.isFinite) ? words : undefined;
 }
 
 function normalizeHost(hostname: string): string {

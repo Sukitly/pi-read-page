@@ -5,6 +5,7 @@ export async function flattenOpenShadowRoots(page: Page): Promise<void> {
   await page
     .evaluate(() => {
       document.querySelectorAll("*").forEach((element) => {
+        element.removeAttribute("data-defuddle-shadow");
         const shadowRoot = element.shadowRoot;
         if (shadowRoot?.innerHTML) {
           element.setAttribute("data-defuddle-shadow", shadowRoot.innerHTML);
@@ -17,40 +18,62 @@ export async function flattenOpenShadowRoots(page: Page): Promise<void> {
 export function prepareHtmlForExtraction(
   html: string,
   url: string,
-): { document: Document; cleanedHtml: string } {
-  const { document, baseUrl } = parseDocument(html, url);
-  absolutizeUrls(document, baseUrl);
-  // Strip executable/style nodes from the document we hand back. Extractor
-  // fallbacks read from this document (body innerHTML / textContent), so leaving
-  // script source in place would leak untrusted code into the extracted output.
-  // Defuddle receives cleanedHtml (a string), not this object.
-  document.querySelectorAll("script, style, noscript").forEach((element) => {
-    element.remove();
-  });
+): {
+  extractionHtml: string;
+  sanitizedHtml: string;
+  fallbackDocument: Document;
+} {
+  const { document: extractionDocument, baseUrl } = parseDocument(html, url);
+  inlineCapturedShadowRoots(extractionDocument);
+  absolutizeUrls(extractionDocument, baseUrl);
+  const extractionHtml = extractionDocument.documentElement?.outerHTML || html;
+
+  const { document: fallbackDocument, baseUrl: fallbackBaseUrl } =
+    parseDocument(extractionHtml, url);
+  sanitizeDocumentForOutput(fallbackDocument);
+  absolutizeUrls(fallbackDocument, fallbackBaseUrl);
 
   return {
-    document: document as unknown as Document,
-    cleanedHtml: cleanHtmlForOutput(
-      document.documentElement?.outerHTML || html,
-      url,
-    ),
+    extractionHtml,
+    sanitizedHtml:
+      fallbackDocument.documentElement?.outerHTML || extractionHtml,
+    fallbackDocument,
   };
 }
 
-export function cleanHtmlForOutput(html: string, url: string): string {
-  const { document, baseUrl } = parseDocument(html, url);
+function inlineCapturedShadowRoots(document: Document): void {
+  document.querySelectorAll("[data-defuddle-shadow]").forEach((host) => {
+    const shadowHtml = host.getAttribute("data-defuddle-shadow");
+    host.removeAttribute("data-defuddle-shadow");
+    if (!shadowHtml) return;
 
-  // Output cleanup only. Do not remove styles before Defuddle extraction because
-  // Defuddle may use visibility/style hints while scoring content.
+    const { document: shadowDocument } = parseHTML(
+      `<html><body>${shadowHtml}</body></html>`,
+    );
+    const fragment = document.createDocumentFragment();
+    for (const node of Array.from(shadowDocument.body?.childNodes ?? [])) {
+      fragment.appendChild(document.importNode(node, true));
+    }
+
+    if (host.tagName.includes("-") && host.parentNode) {
+      const replacement = document.createElement("div");
+      replacement.appendChild(fragment);
+      host.parentNode.replaceChild(replacement, host);
+      return;
+    }
+
+    host.textContent = "";
+    host.appendChild(fragment);
+  });
+}
+
+function sanitizeDocumentForOutput(document: Document): void {
   document.querySelectorAll("script, style, noscript").forEach((element) => {
     element.remove();
   });
   document.querySelectorAll("*").forEach((element) => {
     element.removeAttribute("style");
   });
-
-  absolutizeUrls(document, baseUrl);
-  return document.documentElement?.outerHTML || html;
 }
 
 function parseDocument(
