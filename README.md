@@ -174,20 +174,30 @@ The integration test opens a real browser in the background on macOS, reads all 
 
 Pi package catalog entries are discovered from public npm packages with the `pi-package` keyword.
 
-Before publishing:
-
-```bash
-bun run lint
-bun test
-npm pack --dry-run
-```
-
-Publish:
+Authenticate with npm first:
 
 ```bash
 npm login
-npm publish --access public
+npm whoami
 ```
+
+Run a release by choosing the semantic version increment:
+
+```bash
+bun run release -- patch
+bun run release -- minor
+bun run release -- major
+```
+
+The release script requires a clean, up-to-date `main` or `master` branch. It verifies npm authentication and the currently published version, runs lint, tests, and `npm pack --dry-run`, asks for confirmation, creates the `Release vX.Y.Z` commit and annotated `vX.Y.Z` tag, pushes them, publishes the public npm package, and verifies the npm `latest` tag.
+
+Run only the preflight checks without changing or publishing anything:
+
+```bash
+bun run release -- minor --dry-run
+```
+
+Use `--yes` or `-y` to skip confirmation in a non-interactive environment. If npm publication fails after the git tag is pushed, fix the npm error and retry `npm publish --access public`; do not create another version.
 
 After publishing, install with:
 
