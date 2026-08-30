@@ -16,7 +16,7 @@ Let [pi](https://github.com/earendil-works/pi-coding-agent) read webpages throug
 - A local Chrome/Chromium browser.
 - Bun only if you are developing or running tests locally.
 
-`pi-read-page` uses `playwright-core`; it does not download a browser. By default it launches the `chrome` channel. Set `READ_PAGE_CHROME_PATH` or `READ_PAGE_BROWSER_CHANNEL` if needed.
+`pi-read-page` uses `playwright-core`; it does not download a browser. By default it launches the `chrome` channel. On macOS, Chrome is opened through Launch Services in the background and Playwright connects over CDP, so ordinary reads do not take foreground focus. Set `READ_PAGE_CHROME_PATH` or `READ_PAGE_BROWSER_CHANNEL` if needed.
 
 ## Installation
 
@@ -77,7 +77,7 @@ Use the returned `Next offset` to continue reading long pages.
 
 ```text
 URL normalization and private-network policy
-  -> headed Playwright browser
+  -> headed browser (background launch on macOS)
   -> DOMContentLoaded + network idle wait
   -> final URL private-network policy
   -> read-only lazy-load scroll
@@ -89,7 +89,9 @@ URL normalization and private-network policy
   -> paginated Markdown output
 ```
 
-If the page appears to require a real user action, pi shows a confirmation prompt and leaves the headed browser open. Complete the login/captcha/manual navigation in that browser, then confirm in pi. The same browser page is settled and extracted again. After the tool call completes, the page and browser context are closed.
+Concurrent reads share one background Chrome process and use independent tabs, with a default limit of four active pages. Each call closes only its own tab. After the final active page closes, the browser waits briefly for related work and then exits.
+
+If a page appears to require a real user action, handoffs are serialized: pi brings only that page to the foreground and shows a confirmation prompt. Complete the login/captcha/manual navigation, then confirm in pi. The same page is settled and extracted again.
 
 ## Cache
 
@@ -117,6 +119,7 @@ Cache behavior:
 - Private/local hosts and IPs are blocked by default.
 - Browser automation is read-only: it may navigate, wait, scroll, extract DOM, and cache content.
 - The extension does not expose browser mutation/control tools to the Agent.
+- On macOS, background launch opens an unauthenticated DevTools endpoint on a random `127.0.0.1` TCP port while Chrome is running. Any other local process running as the same user can connect to that endpoint, control the browser and access its persistent login state outside this extension's network policy. Set `READ_PAGE_MACOS_BACKGROUND=0` to avoid this local CDP endpoint.
 - User handoff is only used for actionable captcha, blocked/interstitial, or explicit login-wall states.
 
 To intentionally allow private/local network URLs:
@@ -133,6 +136,9 @@ Optional environment variables:
 | --- | --- | --- |
 | `READ_PAGE_CHROME_PATH` | unset | Explicit Chrome/Chromium executable path. |
 | `READ_PAGE_BROWSER_CHANNEL` | `chrome` | Playwright browser channel. |
+| `READ_PAGE_MACOS_BACKGROUND` | enabled on macOS | Set to `0` to avoid the unauthenticated loopback CDP port and use Playwright's direct launcher, which may take foreground focus. |
+| `READ_PAGE_MAX_CONCURRENCY` | `4` | Maximum number of browser pages extracted concurrently. Clamped to `1`-`16`. |
+| `READ_PAGE_IDLE_CLOSE_MS` | `500` | Delay before closing Chrome after the final page lease is released. Clamped to `0`-`10000`. |
 | `READ_PAGE_PROFILE_DIR` | `~/.pi/agent/read-page/browser-profile` | Persistent browser profile directory. |
 | `READ_PAGE_DISABLE_TEMP_PROFILE_FALLBACK` | unset | Set to `1` to fail instead of using a temporary profile when the persistent profile is locked. |
 | `READ_PAGE_ALLOW_PRIVATE_NETWORK` | unset | Set to `1` to allow private/local network access. |
@@ -159,9 +165,10 @@ Run the browser integration test:
 
 ```bash
 bun run integration -- https://example.com
+bun run integration -- https://example.com https://example.org
 ```
 
-The integration test opens a real browser, extracts the page, prints extraction metadata, and closes the browser context.
+The integration test opens a real browser in the background on macOS, reads all supplied URLs concurrently, prints extraction metadata, and closes the browser context.
 
 ## Publishing
 

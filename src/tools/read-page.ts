@@ -8,8 +8,9 @@ import { Text } from "@earendil-works/pi-tui";
 import type { Page } from "playwright-core";
 import { Type } from "typebox";
 import {
-  closeBrowser,
-  getBrowserRuntimeInfo,
+  type BrowserProfile,
+  closePage,
+  type ManagedPage,
   openPage,
   settlePage,
 } from "../browser/browser-manager";
@@ -106,7 +107,7 @@ type ReadPageRenderArgs = {
 
 type ExtractionRuntime = {
   openPage: typeof openPage;
-  closeBrowser: typeof closeBrowser;
+  closePage: typeof closePage;
   settlePage: typeof settlePage;
   extractMarkdown: typeof extractMarkdown;
   decideUserAction: typeof decideUserAction;
@@ -115,7 +116,7 @@ type ExtractionRuntime = {
 
 const defaultExtractionRuntime: ExtractionRuntime = {
   openPage,
-  closeBrowser,
+  closePage,
   settlePage,
   extractMarkdown,
   decideUserAction,
@@ -210,16 +211,14 @@ export function registerReadPageTool(pi: ExtensionAPI) {
           ],
           details: {},
         });
-        const { extracted, userAction } = await extractWithOptionalUserAction(
-          normalized.url,
-          signal,
-          onUpdate,
-          ctx,
-        );
-        const runtimeInfo = getBrowserRuntimeInfo();
-        const browserProfile = runtimeInfo.usingTemporaryProfile
-          ? "temporary"
-          : "persistent";
+        const { browserProfile, extracted, userAction } =
+          await extractWithOptionalUserAction(
+            normalized.url,
+            signal,
+            onUpdate,
+            ctx,
+          );
+        const usingTemporaryProfile = browserProfile === "temporary";
 
         const meta = await saveCached({
           normalized,
@@ -245,7 +244,7 @@ export function registerReadPageTool(pi: ExtensionAPI) {
                 pagination,
                 meta,
                 cacheStatus,
-                usingTemporaryProfile: runtimeInfo.usingTemporaryProfile,
+                usingTemporaryProfile,
               }),
             },
           ],
@@ -323,12 +322,18 @@ export async function extractWithOptionalUserAction(
   onUpdate: AgentToolUpdateCallback<unknown> | undefined,
   ctx: ExtensionContext,
   runtime: ExtractionRuntime = defaultExtractionRuntime,
-): Promise<{ extracted: ExtractedPage; userAction: boolean }> {
+): Promise<{
+  browserProfile: BrowserProfile;
+  extracted: ExtractedPage;
+  userAction: boolean;
+}> {
+  let managedPage: ManagedPage | undefined;
   let page: Page | undefined;
   let userAction = false;
 
   try {
-    page = await runtime.openPage(url, signal);
+    managedPage = await runtime.openPage(url, signal);
+    page = managedPage.page;
     let extracted = await runtime.extractMarkdown(page);
     let decision = runtime.decideUserAction(extracted);
 
@@ -349,6 +354,7 @@ export async function extractWithOptionalUserAction(
         );
       const confirmed = await runtime.waitForUserAction(
         ctx,
+        page,
         page.url(),
         decision.reason,
         decision.message ||
@@ -372,10 +378,13 @@ export async function extractWithOptionalUserAction(
       }
     }
 
-    return { extracted, userAction };
+    return {
+      browserProfile: managedPage.browserProfile,
+      extracted,
+      userAction,
+    };
   } finally {
-    await page?.close().catch(() => undefined);
-    await runtime.closeBrowser();
+    if (managedPage) await runtime.closePage(managedPage);
   }
 }
 
