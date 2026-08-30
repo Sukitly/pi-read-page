@@ -1,4 +1,8 @@
-import { closeBrowser, openPage } from "../src/browser/browser-manager";
+import {
+  closeBrowser,
+  closePage,
+  openPage,
+} from "../src/browser/browser-manager";
 import { decideUserAction, extractMarkdown } from "../src/browser/extractor";
 
 async function main() {
@@ -34,7 +38,7 @@ async function main() {
       ),
     );
   } finally {
-    await page.close().catch(() => undefined);
+    await closePage(page);
     await closeBrowser();
   }
 }

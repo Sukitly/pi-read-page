@@ -39,6 +39,7 @@ function extractedPage(url: string): ExtractedPage {
 function createPage(url = "https://example.com/") {
   return {
     url: vi.fn(() => url),
+    bringToFront: vi.fn(async () => undefined),
     close: vi.fn(async () => undefined),
   } as unknown as Page;
 }
@@ -48,10 +49,10 @@ function createContext() {
 }
 
 describe("read-page tool browser lifecycle", () => {
-  it("closes the page and browser context after a successful extraction", async () => {
+  it("closes its page lease after a successful extraction", async () => {
     const url = "https://example.com/";
     const page = createPage(url);
-    const closeBrowser = vi.fn(async () => undefined);
+    const closePage = vi.fn(async (page: Page) => page.close());
 
     await extractWithOptionalUserAction(
       url,
@@ -60,7 +61,7 @@ describe("read-page tool browser lifecycle", () => {
       createContext(),
       {
         openPage: vi.fn(async () => page),
-        closeBrowser,
+        closePage,
         settlePage: vi.fn(async () => undefined),
         extractMarkdown: vi.fn(async () => extractedPage(url)),
         decideUserAction: vi.fn(() => ({
@@ -72,13 +73,13 @@ describe("read-page tool browser lifecycle", () => {
     );
 
     expect(page.close).toHaveBeenCalledTimes(1);
-    expect(closeBrowser).toHaveBeenCalledTimes(1);
+    expect(closePage).toHaveBeenCalledWith(page);
   });
 
-  it("keeps the same page open during user handoff, then closes it after re-extraction", async () => {
+  it("keeps the same page open during user handoff, then closes its lease after re-extraction", async () => {
     const url = "https://example.com/login";
     const page = createPage(url);
-    const closeBrowser = vi.fn(async () => undefined);
+    const closePage = vi.fn(async (page: Page) => page.close());
     const settlePage = vi.fn(async () => undefined);
     const extractMarkdown = vi
       .fn()
@@ -98,7 +99,7 @@ describe("read-page tool browser lifecycle", () => {
       });
     const waitForUserAction = vi.fn(async () => {
       expect(page.close).not.toHaveBeenCalled();
-      expect(closeBrowser).not.toHaveBeenCalled();
+      expect(closePage).not.toHaveBeenCalled();
       return true;
     });
 
@@ -109,7 +110,7 @@ describe("read-page tool browser lifecycle", () => {
       createContext(),
       {
         openPage: vi.fn(async () => page),
-        closeBrowser,
+        closePage,
         settlePage,
         extractMarkdown,
         decideUserAction,
@@ -121,11 +122,11 @@ describe("read-page tool browser lifecycle", () => {
     expect(settlePage).toHaveBeenCalledWith(page, undefined);
     expect(extractMarkdown).toHaveBeenCalledTimes(2);
     expect(page.close).toHaveBeenCalledTimes(1);
-    expect(closeBrowser).toHaveBeenCalledTimes(1);
+    expect(closePage).toHaveBeenCalledWith(page);
   });
 
-  it("closes the browser context when opening the page fails", async () => {
-    const closeBrowser = vi.fn(async () => undefined);
+  it("does not close a page lease when opening the page fails", async () => {
+    const closePage = vi.fn(async (page: Page) => page.close());
 
     await expect(
       extractWithOptionalUserAction(
@@ -137,7 +138,7 @@ describe("read-page tool browser lifecycle", () => {
           openPage: vi.fn(async () => {
             throw new Error("open failed");
           }),
-          closeBrowser,
+          closePage,
           settlePage: vi.fn(async () => undefined),
           extractMarkdown: vi.fn(async () =>
             extractedPage("https://example.com/"),
@@ -151,6 +152,6 @@ describe("read-page tool browser lifecycle", () => {
       ),
     ).rejects.toThrow(/open failed/);
 
-    expect(closeBrowser).toHaveBeenCalledTimes(1);
+    expect(closePage).not.toHaveBeenCalled();
   });
 });

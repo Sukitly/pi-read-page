@@ -1,6 +1,36 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { describe, expect, it } from "vitest";
+import type { Page } from "playwright-core";
+import { describe, expect, it, vi } from "vitest";
 import { waitForUserAction } from "../src/browser/user-action";
+
+function createPage() {
+  return {
+    bringToFront: vi.fn(async () => undefined),
+  } as unknown as Page;
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+  return { promise, resolve };
+}
+
+async function waitForExpectation(assertion: () => void): Promise<void> {
+  const deadline = Date.now() + 1_000;
+  let lastError: unknown;
+  while (Date.now() < deadline) {
+    try {
+      assertion();
+      return;
+    } catch (error) {
+      lastError = error;
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error(String(lastError));
+}
 
 describe("user action UI cleanup", () => {
   it("clears footer status with undefined instead of an empty string", async () => {
@@ -19,18 +49,69 @@ describe("user action UI cleanup", () => {
         confirm: async () => true,
       },
     } as unknown as ExtensionContext;
+    const page = createPage();
 
     await waitForUserAction(
       ctx,
+      page,
       "https://example.com/login",
       "login_required",
       "Login required",
     );
 
+    expect(page.bringToFront).toHaveBeenCalledTimes(1);
     expect(statusCalls).toEqual([
       { key: "read-page", text: "Waiting for browser action" },
       { key: "read-page", text: undefined },
     ]);
     expect(widgetCalls.at(-1)).toEqual({ key: "read-page", content: [] });
+  });
+
+  it("serializes simultaneous browser handoffs", async () => {
+    const firstConfirmation = deferred<boolean>();
+    const firstPage = createPage();
+    const secondPage = createPage();
+    const firstContext = {
+      hasUI: true,
+      ui: {
+        setStatus: vi.fn(),
+        setWidget: vi.fn(),
+        confirm: vi.fn(() => firstConfirmation.promise),
+      },
+    } as unknown as ExtensionContext;
+    const secondContext = {
+      hasUI: true,
+      ui: {
+        setStatus: vi.fn(),
+        setWidget: vi.fn(),
+        confirm: vi.fn(async () => true),
+      },
+    } as unknown as ExtensionContext;
+
+    const first = waitForUserAction(
+      firstContext,
+      firstPage,
+      "https://example.com/first",
+      "login_required",
+      "First login",
+    );
+    await waitForExpectation(() =>
+      expect(firstPage.bringToFront).toHaveBeenCalledTimes(1),
+    );
+    const second = waitForUserAction(
+      secondContext,
+      secondPage,
+      "https://example.com/second",
+      "login_required",
+      "Second login",
+    );
+
+    await Promise.resolve();
+    expect(secondPage.bringToFront).not.toHaveBeenCalled();
+
+    firstConfirmation.resolve(true);
+    await expect(first).resolves.toBe(true);
+    await expect(second).resolves.toBe(true);
+    expect(secondPage.bringToFront).toHaveBeenCalledTimes(1);
   });
 });

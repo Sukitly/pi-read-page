@@ -8,7 +8,7 @@ import { Text } from "@earendil-works/pi-tui";
 import type { Page } from "playwright-core";
 import { Type } from "typebox";
 import {
-  closeBrowser,
+  closePage,
   getBrowserRuntimeInfo,
   openPage,
   settlePage,
@@ -106,7 +106,7 @@ type ReadPageRenderArgs = {
 
 type ExtractionRuntime = {
   openPage: typeof openPage;
-  closeBrowser: typeof closeBrowser;
+  closePage: typeof closePage;
   settlePage: typeof settlePage;
   extractMarkdown: typeof extractMarkdown;
   decideUserAction: typeof decideUserAction;
@@ -115,7 +115,7 @@ type ExtractionRuntime = {
 
 const defaultExtractionRuntime: ExtractionRuntime = {
   openPage,
-  closeBrowser,
+  closePage,
   settlePage,
   extractMarkdown,
   decideUserAction,
@@ -349,6 +349,7 @@ export async function extractWithOptionalUserAction(
         );
       const confirmed = await runtime.waitForUserAction(
         ctx,
+        page,
         page.url(),
         decision.reason,
         decision.message ||
@@ -374,8 +375,7 @@ export async function extractWithOptionalUserAction(
 
     return { extracted, userAction };
   } finally {
-    await page?.close().catch(() => undefined);
-    await runtime.closeBrowser();
+    if (page) await runtime.closePage(page);
   }
 }
 

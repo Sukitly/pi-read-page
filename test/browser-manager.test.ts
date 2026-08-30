@@ -4,6 +4,7 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   closeBrowser,
+  closePage,
   getBrowserRuntimeInfo,
   openPage,
   setBrowserAutomationForTest,
@@ -95,6 +96,83 @@ afterEach(async () => {
 });
 
 describe("browser manager lifecycle", () => {
+  it("uses Playwright's direct headed launcher when background launch is unavailable", async () => {
+    const profileDir = await useTemporaryProfileEnv();
+    const page = createPage();
+    const context = createContext(page);
+    launchPersistentContext.mockResolvedValue(context);
+
+    const openedPage = await openPage("https://example.com");
+    await closePage(openedPage);
+
+    expect(launchPersistentContext).toHaveBeenCalledWith(
+      profileDir,
+      expect.objectContaining({
+        headless: false,
+        args: ["--disable-blink-features=AutomationControlled"],
+      }),
+    );
+  });
+
+  it("shares one browser across concurrent pages and closes it after the final lease", async () => {
+    await useTemporaryProfileEnv();
+    process.env.READ_PAGE_IDLE_CLOSE_MS = "10";
+    const firstPage = createPage();
+    const secondPage = createPage();
+    const context = createContext(firstPage, {
+      newPage: vi
+        .fn()
+        .mockResolvedValueOnce(firstPage)
+        .mockResolvedValueOnce(secondPage),
+    });
+    launchPersistentContext.mockResolvedValue(context);
+
+    const [openedFirst, openedSecond] = await Promise.all([
+      openPage("https://example.com/first"),
+      openPage("https://example.com/second"),
+    ]);
+
+    expect(launchPersistentContext).toHaveBeenCalledTimes(1);
+    expect(context.newPage).toHaveBeenCalledTimes(2);
+
+    await closePage(openedFirst);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(context.close).not.toHaveBeenCalled();
+
+    await closePage(openedSecond);
+    await waitForExpectation(() =>
+      expect(context.close).toHaveBeenCalledTimes(1),
+    );
+  });
+
+  it("limits concurrent browser pages without serializing the tool", async () => {
+    await useTemporaryProfileEnv();
+    process.env.READ_PAGE_MAX_CONCURRENCY = "2";
+    const firstPage = createPage();
+    const secondPage = createPage();
+    const thirdPage = createPage();
+    const context = createContext(firstPage, {
+      newPage: vi
+        .fn()
+        .mockResolvedValueOnce(firstPage)
+        .mockResolvedValueOnce(secondPage)
+        .mockResolvedValueOnce(thirdPage),
+    });
+    launchPersistentContext.mockResolvedValue(context);
+
+    const first = openPage("https://example.com/first");
+    const second = openPage("https://example.com/second");
+    const third = openPage("https://example.com/third");
+    const [openedFirst, openedSecond] = await Promise.all([first, second]);
+    expect(context.newPage).toHaveBeenCalledTimes(2);
+
+    await closePage(openedFirst);
+    const openedThird = await third;
+    expect(context.newPage).toHaveBeenCalledTimes(3);
+
+    await Promise.all([closePage(openedSecond), closePage(openedThird)]);
+  });
+
   it("closes an opened page when navigation fails before handing it to the caller", async () => {
     await useTemporaryProfileEnv();
     const page = createPage({
@@ -119,7 +197,7 @@ describe("browser manager lifecycle", () => {
     launchPersistentContext.mockResolvedValue(context);
 
     const openedPage = await openPage("https://example.com");
-    await openedPage.close();
+    await closePage(openedPage);
     await closeBrowser();
 
     expect(context.close).toHaveBeenCalledTimes(1);
@@ -168,6 +246,33 @@ describe("browser manager lifecycle", () => {
     );
   });
 
+  it("does not close shared startup when one concurrent caller aborts", async () => {
+    await useTemporaryProfileEnv();
+    const page = createPage();
+    const context = createContext(page);
+    const startup = deferred<typeof context>();
+    launchPersistentContext.mockReturnValue(startup.promise);
+    const controller = new AbortController();
+
+    const abortedOpen = openPage(
+      "https://example.com/aborted",
+      controller.signal,
+    );
+    const survivingOpen = openPage("https://example.com/surviving");
+    void abortedOpen.catch(() => undefined);
+    await waitForExpectation(() =>
+      expect(launchPersistentContext).toHaveBeenCalledTimes(1),
+    );
+    controller.abort();
+
+    await expect(abortedOpen).rejects.toThrow(/starting browser/);
+    startup.resolve(context);
+    const survivingPage = await survivingOpen;
+    expect(context.close).not.toHaveBeenCalled();
+
+    await closePage(survivingPage);
+  });
+
   it("closes a late-created page when the operation is aborted while opening it", async () => {
     await useTemporaryProfileEnv();
     const page = createPage();
@@ -197,7 +302,7 @@ describe("browser manager lifecycle", () => {
       .mockResolvedValueOnce(context);
 
     const openedPage = await openPage("https://example.com");
-    await openedPage.close();
+    await closePage(openedPage);
     const runtimeInfo = getBrowserRuntimeInfo();
     expect(runtimeInfo.usingTemporaryProfile).toBe(true);
     expect(runtimeInfo.profileDir).toContain("read-page-profile-");
