@@ -1,6 +1,7 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { Page } from "playwright-core";
 import { describe, expect, it, vi } from "vitest";
+import type { ManagedPage } from "../src/browser/browser-manager";
 import { extractWithOptionalUserAction } from "../src/tools/read-page";
 import type { ExtractedPage } from "../src/types";
 
@@ -44,6 +45,17 @@ function createPage(url = "https://example.com/") {
   } as unknown as Page;
 }
 
+function createManagedPage(
+  page: Page,
+  browserProfile: ManagedPage["browserProfile"] = "persistent",
+): ManagedPage {
+  return {
+    browserProfile,
+    close: vi.fn(async () => page.close()),
+    page,
+  };
+}
+
 function createContext() {
   return { hasUI: false } as unknown as ExtensionContext;
 }
@@ -52,15 +64,16 @@ describe("read-page tool browser lifecycle", () => {
   it("closes its page lease after a successful extraction", async () => {
     const url = "https://example.com/";
     const page = createPage(url);
-    const closePage = vi.fn(async (page: Page) => page.close());
+    const managedPage = createManagedPage(page, "temporary");
+    const closePage = vi.fn(async (opened: ManagedPage) => opened.close());
 
-    await extractWithOptionalUserAction(
+    const result = await extractWithOptionalUserAction(
       url,
       undefined,
       undefined,
       createContext(),
       {
-        openPage: vi.fn(async () => page),
+        openPage: vi.fn(async () => managedPage),
         closePage,
         settlePage: vi.fn(async () => undefined),
         extractMarkdown: vi.fn(async () => extractedPage(url)),
@@ -73,13 +86,15 @@ describe("read-page tool browser lifecycle", () => {
     );
 
     expect(page.close).toHaveBeenCalledTimes(1);
-    expect(closePage).toHaveBeenCalledWith(page);
+    expect(closePage).toHaveBeenCalledWith(managedPage);
+    expect(result.browserProfile).toBe("temporary");
   });
 
   it("keeps the same page open during user handoff, then closes its lease after re-extraction", async () => {
     const url = "https://example.com/login";
     const page = createPage(url);
-    const closePage = vi.fn(async (page: Page) => page.close());
+    const managedPage = createManagedPage(page);
+    const closePage = vi.fn(async (opened: ManagedPage) => opened.close());
     const settlePage = vi.fn(async () => undefined);
     const extractMarkdown = vi
       .fn()
@@ -109,7 +124,7 @@ describe("read-page tool browser lifecycle", () => {
       undefined,
       createContext(),
       {
-        openPage: vi.fn(async () => page),
+        openPage: vi.fn(async () => managedPage),
         closePage,
         settlePage,
         extractMarkdown,
@@ -122,11 +137,11 @@ describe("read-page tool browser lifecycle", () => {
     expect(settlePage).toHaveBeenCalledWith(page, undefined);
     expect(extractMarkdown).toHaveBeenCalledTimes(2);
     expect(page.close).toHaveBeenCalledTimes(1);
-    expect(closePage).toHaveBeenCalledWith(page);
+    expect(closePage).toHaveBeenCalledWith(managedPage);
   });
 
   it("does not close a page lease when opening the page fails", async () => {
-    const closePage = vi.fn(async (page: Page) => page.close());
+    const closePage = vi.fn(async (opened: ManagedPage) => opened.close());
 
     await expect(
       extractWithOptionalUserAction(

@@ -119,6 +119,7 @@ Cache behavior:
 - Private/local hosts and IPs are blocked by default.
 - Browser automation is read-only: it may navigate, wait, scroll, extract DOM, and cache content.
 - The extension does not expose browser mutation/control tools to the Agent.
+- On macOS, background launch opens an unauthenticated DevTools endpoint on a random `127.0.0.1` TCP port while Chrome is running. Any other local process running as the same user can connect to that endpoint, control the browser and access its persistent login state outside this extension's network policy. Set `READ_PAGE_MACOS_BACKGROUND=0` to avoid this local CDP endpoint.
 - User handoff is only used for actionable captcha, blocked/interstitial, or explicit login-wall states.
 
 To intentionally allow private/local network URLs:
@@ -135,7 +136,7 @@ Optional environment variables:
 | --- | --- | --- |
 | `READ_PAGE_CHROME_PATH` | unset | Explicit Chrome/Chromium executable path. |
 | `READ_PAGE_BROWSER_CHANNEL` | `chrome` | Playwright browser channel. |
-| `READ_PAGE_MACOS_BACKGROUND` | enabled on macOS | Set to `0` to use Playwright's direct launcher, which may take foreground focus. |
+| `READ_PAGE_MACOS_BACKGROUND` | enabled on macOS | Set to `0` to avoid the unauthenticated loopback CDP port and use Playwright's direct launcher, which may take foreground focus. |
 | `READ_PAGE_MAX_CONCURRENCY` | `4` | Maximum number of browser pages extracted concurrently. Clamped to `1`-`16`. |
 | `READ_PAGE_IDLE_CLOSE_MS` | `500` | Delay before closing Chrome after the final page lease is released. Clamped to `0`-`10000`. |
 | `READ_PAGE_PROFILE_DIR` | `~/.pi/agent/read-page/browser-profile` | Persistent browser profile directory. |
@@ -164,9 +165,10 @@ Run the browser integration test:
 
 ```bash
 bun run integration -- https://example.com
+bun run integration -- https://example.com https://example.org
 ```
 
-The integration test opens a real browser in the background on macOS, extracts the page, prints extraction metadata, and closes the browser context.
+The integration test opens a real browser in the background on macOS, reads all supplied URLs concurrently, prints extraction metadata, and closes the browser context.
 
 ## Publishing
 

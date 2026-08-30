@@ -67,6 +67,67 @@ describe("user action UI cleanup", () => {
     expect(widgetCalls.at(-1)).toEqual({ key: "read-page", content: [] });
   });
 
+  it("removes an aborted queued handoff and grants the next waiter", async () => {
+    const firstConfirmation = deferred<boolean>();
+    const firstPage = createPage();
+    const abortedPage = createPage();
+    const thirdPage = createPage();
+    const firstContext = {
+      hasUI: true,
+      ui: {
+        setStatus: vi.fn(),
+        setWidget: vi.fn(),
+        confirm: vi.fn(() => firstConfirmation.promise),
+      },
+    } as unknown as ExtensionContext;
+    const immediateContext = {
+      hasUI: true,
+      ui: {
+        setStatus: vi.fn(),
+        setWidget: vi.fn(),
+        confirm: vi.fn(async () => true),
+      },
+    } as unknown as ExtensionContext;
+    const controller = new AbortController();
+
+    const first = waitForUserAction(
+      firstContext,
+      firstPage,
+      "https://example.com/first",
+      "login_required",
+      "First login",
+    );
+    await waitForExpectation(() =>
+      expect(firstPage.bringToFront).toHaveBeenCalledTimes(1),
+    );
+    const aborted = waitForUserAction(
+      immediateContext,
+      abortedPage,
+      "https://example.com/aborted",
+      "login_required",
+      "Aborted login",
+      controller.signal,
+    );
+    void aborted.catch(() => undefined);
+    const third = waitForUserAction(
+      immediateContext,
+      thirdPage,
+      "https://example.com/third",
+      "login_required",
+      "Third login",
+    );
+
+    controller.abort();
+    await expect(aborted).rejects.toThrow(/waiting for browser handoff/);
+    expect(abortedPage.bringToFront).not.toHaveBeenCalled();
+    expect(thirdPage.bringToFront).not.toHaveBeenCalled();
+
+    firstConfirmation.resolve(true);
+    await expect(first).resolves.toBe(true);
+    await expect(third).resolves.toBe(true);
+    expect(thirdPage.bringToFront).toHaveBeenCalledTimes(1);
+  });
+
   it("serializes simultaneous browser handoffs", async () => {
     const firstConfirmation = deferred<boolean>();
     const firstPage = createPage();

@@ -1,16 +1,9 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { Page } from "playwright-core";
+import { AbortableSemaphore } from "../concurrency/abortable-semaphore";
 import type { HandoffReason } from "../types";
 
-type HandoffWaiter = {
-  resolve: (release: () => void) => void;
-  reject: (error: Error) => void;
-  signal?: AbortSignal;
-  onAbort?: () => void;
-};
-
-const handoffWaiters: HandoffWaiter[] = [];
-let handoffLocked = false;
+const handoffSemaphore = new AbortableSemaphore(1);
 
 export async function waitForUserAction(
   ctx: ExtensionContext,
@@ -26,7 +19,10 @@ export async function waitForUserAction(
     );
   }
 
-  const releaseHandoff = await acquireHandoff(signal);
+  const handoffPermit = await handoffSemaphore.acquire(
+    signal,
+    "read-page aborted while waiting for browser handoff",
+  );
   const statusKey = "read-page";
   try {
     await page.bringToFront();
@@ -53,66 +49,6 @@ export async function waitForUserAction(
   } finally {
     ctx.ui.setStatus(statusKey, undefined);
     ctx.ui.setWidget(statusKey, []);
-    releaseHandoff();
+    handoffPermit.release();
   }
-}
-
-async function acquireHandoff(signal?: AbortSignal): Promise<() => void> {
-  if (signal?.aborted) {
-    throw abortError("read-page aborted while waiting for browser handoff");
-  }
-  if (!handoffLocked) {
-    handoffLocked = true;
-    return createHandoffRelease();
-  }
-
-  return new Promise<() => void>((resolve, reject) => {
-    const waiter: HandoffWaiter = { resolve, reject, signal };
-    if (signal) {
-      waiter.onAbort = () => {
-        const index = handoffWaiters.indexOf(waiter);
-        if (index >= 0) handoffWaiters.splice(index, 1);
-        reject(
-          abortError("read-page aborted while waiting for browser handoff"),
-        );
-      };
-      signal.addEventListener("abort", waiter.onAbort, { once: true });
-    }
-    handoffWaiters.push(waiter);
-    if (signal?.aborted) waiter.onAbort?.();
-  });
-}
-
-function createHandoffRelease(): () => void {
-  let released = false;
-  return () => {
-    if (released) return;
-    released = true;
-
-    let next: HandoffWaiter | undefined;
-    while (handoffWaiters.length > 0 && !next) {
-      const candidate = handoffWaiters.shift();
-      if (!candidate) break;
-      if (candidate.signal?.aborted) {
-        candidate.onAbort?.();
-        continue;
-      }
-      next = candidate;
-    }
-
-    if (!next) {
-      handoffLocked = false;
-      return;
-    }
-    if (next.signal && next.onAbort) {
-      next.signal.removeEventListener("abort", next.onAbort);
-    }
-    next.resolve(createHandoffRelease());
-  };
-}
-
-function abortError(message: string): Error {
-  const error = new Error(message);
-  error.name = "AbortError";
-  return error;
 }
