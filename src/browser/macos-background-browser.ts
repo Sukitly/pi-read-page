@@ -172,7 +172,10 @@ async function launchBackgroundBrowser(
         "--no-default-browser-check",
         "--disable-extensions",
         "--disable-blink-features=AutomationControlled",
-        "about:blank",
+        // Chrome activates itself when it opens its startup window, even when
+        // Launch Services is told not to (`open -g`). Start windowless and let
+        // createBackgroundPage open inactive windows instead.
+        "--no-startup-window",
       ]);
     } catch (error) {
       throw new MacosBackgroundBrowserError(
@@ -388,6 +391,7 @@ export async function createBackgroundPage(
       url: markerUrl,
       background: true,
       focus: false,
+      newWindow: true,
     });
     targetId = created.targetId;
     return await pagePromise;

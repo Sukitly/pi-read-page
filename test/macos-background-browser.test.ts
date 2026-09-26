@@ -154,6 +154,7 @@ describe("macOS background browser", () => {
         url: expect.stringMatching(/^about:blank#read-page-/),
         background: true,
         focus: false,
+        newWindow: true,
       }),
     );
     expect(session.detach).toHaveBeenCalledTimes(1);
@@ -183,7 +184,11 @@ describe("macOS background browser", () => {
         "--read-page-launch-token=launch-token",
         "--remote-debugging-address=127.0.0.1",
         "--remote-debugging-port=0",
+        "--no-startup-window",
       ]),
+    );
+    expect(harness.openApplication).not.toHaveBeenCalledWith(
+      expect.arrayContaining(["about:blank"]),
     );
 
     await launched.close();
